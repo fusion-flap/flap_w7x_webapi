@@ -51,8 +51,7 @@ class GetSignal(object):
         self.resample_query = ""
         self.url = ""
 
-    @staticmethod
-    def url_request(url_str):
+    def url_request(self, url_str):
         """
         This function handles an url request for the W7X archive system.
 
@@ -543,6 +542,7 @@ class ABESData(VectorData):
 def conv_scalar_to_dataobj(data, url, data_name, exp_id, options):
     """Converts the ScalarData obtained by the code to DataObject class of flap
     """
+    print(data.keys())
     if not data['dimensionCount'] == 1:
         raise TypeError('conv_scalar_to_dataobj is incompatible with higher than one dimensional data, ' +
                         'current data dimension: '+str(data['dimensionCount']))
@@ -573,14 +573,14 @@ def conv_scalar_to_dataobj(data, url, data_name, exp_id, options):
 
     if equidistant is True:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                     start=start, step=[step], dimension_list=[0])
+                                     start=[start], step=[step], dimension_list=[0])
     else:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=shape,
                                      values=np.array(data["dimensions"]), dimension_list=[0])
 
     # Temporal sample coord
     time_sample = flap.Coordinate(name='Sample', unit=1, mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                  start=1, step=[1], dimension_list=[0])
+                                  start=[1], step=[1], dimension_list=[0])
 
     coords = [time_coord, time_sample]
 
@@ -622,18 +622,18 @@ def conv_aug2_to_dataobj(data, url, data_name, exp_id, options):
 
     if equidistant is True:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                     start=start, step=[step], dimension_list=[0])
+                                     start=[start], step=[step], dimension_list=[0])
     else:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=shape,
                                      values=np.asarray(data["dimensions"]), dimension_list=[0])
 
     # Temporal sample coord
     time_sample = flap.Coordinate(name='Sample', unit='1', mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                  start=1, step=[1], dimension_list=[0])
+                                  start=[1], step=[1], dimension_list=[0])
     channel_coord = flap.Coordinate(name='Channel', unit='', mode=flap.CoordinateMode(equidistant=True),
-                                    shape=[np.shape(data['values'])[1]], start=1, step=[1], dimension_list=[1])
+                                    shape=[np.shape(data['values'])[1]], start=np.asarray([1]), step=np.asarray([1]), dimension_list=[1])
     wavelength_coord = flap.Coordinate(name='Wavelength', unit='', mode=flap.CoordinateMode(equidistant=True),
-                                       shape=[np.shape(data['values'])[2]], start=0, step=[1], dimension_list=[2])
+                                       shape=[np.shape(data['values'])[2]], start=np.asarray([0]), step=np.asarray([1]), dimension_list=[2])
 
     coords = [time_coord, time_sample, channel_coord, wavelength_coord]
 
@@ -676,14 +676,14 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
 
     if equidistant is True:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                     start=start, step=[step], dimension_list=[0])
+                                     start=[start], step=[step], dimension_list=[0])
     else:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=shape,
                                      values=np.asarray(data.data[0].list[0].time), dimension_list=[0])
 
     # Temporal sample coord
     time_sample = flap.Coordinate(name='Sample', unit='1', mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                  start=1, step=[1], dimension_list=[0])
+                                  start=[1], step=[1], dimension_list=[0])
 
     coords = [time_coord, time_sample]
 
@@ -978,103 +978,3 @@ class WriteABESSignal(GetSignal):
 
 def register():
     flap.register_data_source('W7X_WEBAPI', get_data_func=get_data, add_coord_func=add_coordinate)
-
-#-----------------------------------------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------------------------------------
-
-class Points3D:
-    '''
-    Used for storing a number of points and to perform coordinate transformations
-    If a point is added in either xyz of radius - theta - z coordinates, an automatic transformation to
-    the other coordinate system is performed. Not yet compatible with FLAP coordinates
-    '''
-
-    __module__ = "customfiles.InternalData"
-
-    def __init__(self):
-        self.xyz = np.empty([0, 3])  # point coordinates in stellarator xyz
-        self.rtz = np.empty([0, 3])  # point coordinates in stellarator radius-theta-z coordinates
-        self.reff = np.empty([0])  # a vector storing the effective radius of every point
-        self.shotID = None
-        self.ref_eq = None  # the w7x vmec equilibrium reference ID of the shot
-
-    def append_xyz(self, xyz_list):
-        '''
-        Add points to the object based on their xyz coordinates. xyz_list has to be
-        either a numpy array of length 3 defining the point location, or a two-dimensional
-        numpy array.
-        '''
-        if xyz_list.ndim == 1:
-            xyz_list = np.asarray([xyz_list])
-        self.xyz = np.append(self.xyz, xyz_list, axis=0)
-        self.rtz = self.xyz_to_rtz(self.xyz)
-
-    def append_rtz(self, rtz_list):
-        '''
-        Add points to the object based on their rtz coordinates. rtz_list has to be
-        either a numpy array of length 3 defining the point location, or a two-dimensional
-        numpy array.
-        '''
-        if rtz_list.ndim == 1:
-            rtz_list = np.asarray([rtz_list])
-        self.rtz = np.append(self.rtz, rtz_list, axis=0)
-        self.xyz = self.rtz_to_xyz(self.rtz)
-
-    @staticmethod
-    def rtz_to_xyz(rtz_list):
-        '''
-        Convert rtz coordinates to xyz and returns the value. rtz_list has to be
-        either a numpy array of length 3 defining the point location, or a two-dimensional
-        numpy array. Practically list of points.
-        '''
-        if rtz_list.ndim == 1:
-            rtz_list = np.asarray([rtz_list])
-        x_list = rtz_list[:, 0]*np.cos(rtz_list[:, 1])
-        y_list = rtz_list[:, 0]*np.sin(rtz_list[:, 1])
-        return np.squeeze(np.transpose([x_list, y_list, rtz_list[:, 2]]))
-
-    @staticmethod
-    def xyz_to_rtz(xyz_list):
-        '''
-        Convert xyz coordinates to rtz and returns the value. xyz_list has to be
-        either a numpy array of length 3 defining the point location, or a two-dimensional
-        numpy array. Practically list of points.
-        '''
-        if xyz_list.ndim == 1:
-            xyz_list = np.asarray([xyz_list])
-        r_list = np.linalg.norm(xyz_list[:, 0:2], axis=1)
-        t_list = np.arctan2(xyz_list[:, 1], xyz_list[:, 0])
-        return [np.squeeze(np.transpose([r_list, t_list, xyz_list[:, 2]]))]
-
-    def xyz_to_reff(self, shotID=None):
-        '''
-        Obtain the effective radius based on self.xyz of the object and vmec results
-        '''
-        if shotID:
-            self.shotID = shotID
-            self.ref_eq = get_refeq(shotID)
-            if self.ref_eq:
-                url = 'http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/'+self.ref_eq+'/reff.json?'
-            else:
-                info = 'Points3D ' + func_name + 'error: No data at ' + url + "\n" + \
-                        "The information at http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref may help"
-                logger.error(info)
-                print(info)
-        self.reff = np.empty([0])
-        for point in self.xyz:
-            url_str = url + 'x='+str(point[0])+'&y='+str(point[1])+'&z='+str(point[2])
-            data = GetSignal.url_request(url_str)
-            self.reff = np.append(self.reff, data['reff'][0])            
-
-def get_refeq(shotID):
-    """
-    Used for getting the reference number for a w7x configurations from a shotID
-    Input of shotID is a string, output is a sting in the format e.g. w7x_ref_120
-    """
-    source_stream = 'ArchiveDB/raw/W7XAnalysis/Equilibrium/RefEq_PARLOG/V1/parms/equilibriumID/'
-    refeq = GetSignal(source_stream)
-    refeq.shotid_time_query_gen(shotID)
-    data = refeq.archive_pull()
-    ref_eq = data['values'][0]
-    return ref_eq

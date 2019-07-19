@@ -2,7 +2,7 @@ import unittest
 import datetime
 import numpy as np
 import flap
-import flap_w7x_webapi as webapi
+import flap.modules.w7x_webapi as webapi
 
 # -------------------------------------INDEPENDENT FUNCTIONS FROM FLAP--------------------------------------------------
 
@@ -136,17 +136,6 @@ class FLAPTest(unittest.TestCase):
     def test_vectordata(self):
         self.assertEqual(test_vectordata(),  2.614503530033091e+19)
 
-#--------------------------------------------POINTS3D check-------------------------------------------------------------
-def test_reff():
-    point = webapi.Points3D()
-    point.append_xyz(np.array([0,6.0,0]))
-    point.xyz_to_reff('20181018.003')
-    return point.reff
-
-
-class Points3DTest(unittest.TestCase):
-    def test_vectordata(self):
-        self.assertEqual(test_reff(),  0.45680578471016137)
 
 if __name__ == '__main__':
     unittest.main()
