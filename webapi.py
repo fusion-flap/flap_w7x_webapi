@@ -555,7 +555,7 @@ def conv_scalar_to_dataobj(data, url, data_name, exp_id, options):
     unit = 'ns'
     if 'Scale Time' in options.keys():
         if options['Scale Time'] is True:
-            unit = 's'
+            unit = 'Second'
     # Checking equidistance of time
     equidistant = False
     if 'Check Time Equidistant' in options.keys():
@@ -604,7 +604,7 @@ def conv_aug2_to_dataobj(data, url, data_name, exp_id, options):
     unit = 'ns'
     if 'Scale Time' in options.keys():
         if options['Scale Time'] is True:
-            unit = 's'
+            unit = 'Second'
     # Checking equidistance of time
     equidistant = False
     if 'Check Time Equidistant' in options.keys():
@@ -657,7 +657,7 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
     unit = 'ns'
     if 'Scale Time' in options.keys():
         if options['Scale Time'] is True:
-            unit = 's'
+            unit = 'Second'
     # Checking equidistance of time
     equidistant = False
     if 'Check Time Equidistant' in options.keys():
