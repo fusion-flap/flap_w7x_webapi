@@ -706,7 +706,7 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
     return d
 
 
-def get_data(exp_id=None, data_name=None, no_data=False, options=None, coordinates=None):
+def get_data(exp_id=None, data_name=None, no_data=False, options=None, coordinates=None, data_source=None):
     """ Data read function for the W7-X Alkali BES diagnostic
     data_name: should be a string, currently either:
         ECRH
@@ -976,5 +976,5 @@ class WriteABESSignal(GetSignal):
                     req.add_header('Content-Type', 'application/json; charset=utf-8')
                     urllib.request.urlopen(req, self.json["data"][key])
 
-def register():
+def register(data_source=None):
     flap.register_data_source('W7X_WEBAPI', get_data_func=get_data, add_coord_func=add_coordinate)
