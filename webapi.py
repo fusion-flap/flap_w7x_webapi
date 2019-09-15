@@ -555,7 +555,7 @@ def conv_scalar_to_dataobj(data, url, data_name, exp_id, options):
     unit = 'ns'
     if 'Scale Time' in options.keys():
         if options['Scale Time'] is True:
-            unit = 's'
+            unit = 'Second'
     # Checking equidistance of time
     equidistant = False
     if 'Check Time Equidistant' in options.keys():
@@ -573,14 +573,14 @@ def conv_scalar_to_dataobj(data, url, data_name, exp_id, options):
 
     if equidistant is True:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                     start=[start], step=[step], dimension_list=[0])
+                                     start=start, step=[step], dimension_list=[0])
     else:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=shape,
                                      values=np.array(data["dimensions"]), dimension_list=[0])
 
     # Temporal sample coord
     time_sample = flap.Coordinate(name='Sample', unit=1, mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                  start=[1], step=[1], dimension_list=[0])
+                                  start=1, step=[1], dimension_list=[0])
 
     coords = [time_coord, time_sample]
 
@@ -604,7 +604,7 @@ def conv_aug2_to_dataobj(data, url, data_name, exp_id, options):
     unit = 'ns'
     if 'Scale Time' in options.keys():
         if options['Scale Time'] is True:
-            unit = 's'
+            unit = 'Second'
     # Checking equidistance of time
     equidistant = False
     if 'Check Time Equidistant' in options.keys():
@@ -622,18 +622,18 @@ def conv_aug2_to_dataobj(data, url, data_name, exp_id, options):
 
     if equidistant is True:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                     start=[start], step=[step], dimension_list=[0])
+                                     start=start, step=[step], dimension_list=[0])
     else:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=shape,
                                      values=np.asarray(data["dimensions"]), dimension_list=[0])
 
     # Temporal sample coord
     time_sample = flap.Coordinate(name='Sample', unit='1', mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                  start=[1], step=[1], dimension_list=[0])
+                                  start=1, step=[1], dimension_list=[0])
     channel_coord = flap.Coordinate(name='Channel', unit='', mode=flap.CoordinateMode(equidistant=True),
-                                    shape=[np.shape(data['values'])[1]], start=np.asarray([1]), step=np.asarray([1]), dimension_list=[1])
+                                    shape=[np.shape(data['values'])[1]], start=1, step=[1], dimension_list=[1])
     wavelength_coord = flap.Coordinate(name='Wavelength', unit='', mode=flap.CoordinateMode(equidistant=True),
-                                       shape=[np.shape(data['values'])[2]], start=np.asarray([0]), step=np.asarray([1]), dimension_list=[2])
+                                       shape=[np.shape(data['values'])[2]], start=0, step=np.asarray([1]), dimension_list=[2])
 
     coords = [time_coord, time_sample, channel_coord, wavelength_coord]
 
@@ -657,7 +657,7 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
     unit = 'ns'
     if 'Scale Time' in options.keys():
         if options['Scale Time'] is True:
-            unit = 's'
+            unit = 'Second'
     # Checking equidistance of time
     equidistant = False
     if 'Check Time Equidistant' in options.keys():
@@ -676,14 +676,14 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
 
     if equidistant is True:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                     start=[start], step=[step], dimension_list=[0])
+                                     start=start, step=[step], dimension_list=[0])
     else:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=shape,
                                      values=np.asarray(data.data[0].list[0].time), dimension_list=[0])
 
     # Temporal sample coord
     time_sample = flap.Coordinate(name='Sample', unit='1', mode=flap.CoordinateMode(equidistant=True), shape=shape,
-                                  start=[1], step=[1], dimension_list=[0])
+                                  start=1, step=[1], dimension_list=[0])
 
     coords = [time_coord, time_sample]
 
@@ -706,7 +706,7 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
     return d
 
 
-def get_data(exp_id=None, data_name=None, no_data=False, options=None, coordinates=None):
+def get_data(exp_id=None, data_name=None, no_data=False, options=None, coordinates=None, data_source=None):
     """ Data read function for the W7-X Alkali BES diagnostic
     data_name: should be a string, currently either:
         ECRH
@@ -976,7 +976,7 @@ class WriteABESSignal(GetSignal):
                     req.add_header('Content-Type', 'application/json; charset=utf-8')
                     urllib.request.urlopen(req, self.json["data"][key])
 
-def register():
+def register(data_source=None):
     flap.register_data_source('W7X_WEBAPI', get_data_func=get_data, add_coord_func=add_coordinate)
 
 #-----------------------------------------------------------------------------------------------------------------------
