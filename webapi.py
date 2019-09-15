@@ -1067,6 +1067,27 @@ class Points3D:
             data = GetSignal.url_request(url_str)
             self.reff = np.append(self.reff, data['reff'][0])            
 
+def get_lcfs(shotID, phi):
+    """
+    Used for getting the location of the last closed flux surface at a given phi location. 
+    Phi should be given in degrees
+    Return the r and z coordinates
+    """
+    ref_eq = get_refeq(shotID)
+    if ref_eq:
+        url = 'http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/'+ref_eq+'/lcfs.json?phi='+str(phi)
+    else:
+        info = 'No refrence ID for shot' + str(shotID) + "\n" + \
+                "The information at http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref may help"
+        logger.error(info)
+        print(info)
+        return -1
+    data = GetSignal.url_request(url)
+    r =  data['lcfs'][0]['x1']
+    z =  data['lcfs'][0]['x3']
+    return r, z
+
+
 def get_refeq(shotID):
     """
     Used for getting the reference number for a w7x configurations from a shotID
