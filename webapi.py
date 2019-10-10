@@ -306,7 +306,7 @@ class GetSignal(object):
             split_out = signal_id.split('-')
             version = split_out[1]
             version = version[1:]
-            if version[-1] == 'S':
+            if version[-1] == 'S' or version[-1] == 's':
                 version = version[:-1]
                 sandbox = True
             else:
@@ -327,14 +327,15 @@ class GetSignal(object):
             abes_dict['x_coord'] = '5/x_coord/'
             abes_dict['y_coord'] = '6/y_coord/'
             if stream_type == 'data':
-                location_string = 'Test/raw/W7X/QSI/vol_' + volume + '_DATASTREAM/V' + version + \
+                location_string = 'Test/raw/W7X/QSI2/vol_' + volume + '_DATASTREAM/V' + version + \
                     '/' + abes_dict[quantity]
             elif stream_type == 'param':
-                location_string = 'Test/raw/W7X/QSI/vol_' + volume + '_PARLOG/V' + version \
+                location_string = 'Test/raw/W7X/QSI2/vol_' + volume + '_PARLOG/V' + version \
                     + '/parms/' + abes_dict[quantity]
             
             if sandbox is True:
                 location_string = location_string.replace("Test", "Sandbox")
+            print(location_string)
             return location_string
 
         else:
@@ -509,9 +510,10 @@ class ABESData(VectorData):
         def __init__(self, signal_id, signal_types=None, volumes=None):
             # signal_id is expected to be in the form 'TS-v20'
             if signal_types is None:
-                signal_types = ['density', 'density_error_low', 'density_error_high', 'meas_light', 'meas_light_error']
+                signal_types = ['density', 'density_error_low', 'density_error_high', 'meas_light', 'meas_light_error',
+                                'x_coord', 'y_coord']
 
-            param_types = ['x_coord-data', 'y_coord-data']
+            param_types = None # ['x_coord-data', 'y_coord-data']
 
             if volumes is None:
                 volumes = np.linspace(1, 30, num=30, dtype=int)
@@ -938,10 +940,9 @@ class WriteABESSignal(GetSignal):
                             }],
                 "dimensions": [int(element) for element in self.dimensions]
                 }
-        self.json["params"] = json.dumps(self.params).encode('utf-8')
+        self.json["params"] = json.dumps(self.params).encode('utf-16')
     
     def create_version(self, sandbox=False):
-        try:
             version = { 
                     "versionInfo" : [ 
                             {
@@ -952,30 +953,31 @@ class WriteABESSignal(GetSignal):
                                     }
                             ]
                     }
-            json_version = json.dumps(version).encode('utf-8')
+            json_version = json.dumps(version).encode('utf-16')
             if sandbox is True:
                 url='http://archive-webapi.ipp-hgw.mpg.de/Sandbox/raw/W7X/QSI/'
             else:
                 url='http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
             
             for key in self.json["data"].keys():
+                try:
                     url_data = url + key  + "_DATASTREAM"+"/_versions.json"
                     url_parms = url + key  + "_PARLOG"+"/_versions.json"
                     
                     
                     req = urllib.request.Request(url_data)
-                    req.add_header('Content-Type', 'application/json; charset=utf-8')
+                    req.add_header('Content-Type', 'application/json; charset=utf-16')
     #                req.get_method = lambda: "POST"
                     urllib.request.urlopen(req, json_version)
                     req = urllib.request.Request(url_parms)
-                    req.add_header('Content-Type', 'application/json; charset=utf-8')
+                    req.add_header('Content-Type', 'application/json; charset=utf-16')
                     urllib.request.urlopen(req, json_version)
-        except urllib.error.HTTPError as e:
-            print(e)
-            print(e.headers)
+                except urllib.error.HTTPError as e:
+                    print('error for creating version for '+key)
+                    print(e)
+                    print(e.headers)
         
     def upload_json(self, sandbox=None):
-        try:
             if hasattr(self, 'sandbox') and sandbox == None:
                 sandbox =self.sandbox
             if sandbox is True:
@@ -984,24 +986,19 @@ class WriteABESSignal(GetSignal):
                 url='http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
     
             for key in self.json["data"].keys():
-                if sandbox is True:
-                    url_parms  = url + key+"_PARLOG"
-                else:
+                print('uploading '+key)
+                try:
                     url_parms  = url + key+"_PARLOG/V"+str(self.version)
-                req = urllib.request.Request(url_parms)
-                req.add_header('Content-Type', 'application/json; charset=utf-8')
-                urllib.request.urlopen(req, self.json["params"])
-                if sandbox is True:
-                    url_data = url + key+"_DATASTREAM"
-                else:
+                    req = urllib.request.Request(url_parms)
+                    req.add_header('Content-Type', 'application/json; charset=utf-8')
+                    urllib.request.urlopen(req, self.json["params"])
                     url_data = url + key+"_DATASTREAM/V"+str(self.version)
-                req = urllib.request.Request(url_data)
-                req.add_header('Content-Type', 'application/json; charset=utf-8')
-                urllib.request.urlopen(req, self.json["data"][key])
-        except urllib.error.HTTPError as e:
-            print(e)
-            print(e.headers)
-            raise urllib.error.HTTPError(e)
+                    req = urllib.request.Request(url_data)
+                    req.add_header('Content-Type', 'application/json; charset=utf-8')
+                    urllib.request.urlopen(req, self.json["data"][key])
+                except urllib.error.HTTPError as e:
+                    print(e)
+                    print(e.headers)
 
 def register(data_source=None):
     flap.register_data_source('W7X_WEBAPI', get_data_func=get_data, add_coord_func=add_coordinate)
