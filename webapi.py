@@ -306,6 +306,11 @@ class GetSignal(object):
             split_out = signal_id.split('-')
             version = split_out[1]
             version = version[1:]
+            if version[-1] == 'S':
+                version = version[:-1]
+                sandbox = True
+            else:
+                sandbox = False
             quantity = split_out[2]
             stream_type = split_out[3]
             volume = split_out[4]
@@ -327,6 +332,9 @@ class GetSignal(object):
             elif stream_type == 'param':
                 location_string = 'Test/raw/W7X/QSI/vol_' + volume + '_PARLOG/V' + version \
                     + '/parms/' + abes_dict[quantity]
+            
+            if sandbox is True:
+                location_string = location_string.replace("Test", "Sandbox")
             return location_string
 
         else:
@@ -834,7 +842,7 @@ def add_coordinate(data_object, new_coordinates, options=None):
 # ----------------------------------------------------------------------------------------------------------------------
 
 class WriteABESSignal(GetSignal):
-    def __init__(self, datalist, shotid, minindex, version=1.0):
+    def __init__(self, datalist, shotid, minindex=0, version=1.0):
         self.dens = datalist[0]
         self.light_meas = datalist[1]
 #        self.light_recon = datalist[2]
@@ -861,40 +869,32 @@ class WriteABESSignal(GetSignal):
     def set_data(self):
         #setting the time
         [from_time, upto_time] = self.shotid_time_gen()
-        time_vec=self.dens.coordinate('Time')[0][:,0]
+        time_vec=np.unique(self.dens.coordinate('Time')[0])
         self.dimensions = [from_time + decimal.Decimal(int(time_vec[index]*1e9)) for index in range(0,len(time_vec))]
-        density = self.dens.data*1e19
-        density_low_error = self.dens.error[0]*1e19
-        density_high_error = self.dens.error[1]*1e19
-        
-        chanNum = len(self.dens.coordinate('Device x')[0][0,:].tolist())
+
         temp = {}
-        for index in range(0,chanNum):
-#            self.data = {
-#                        "datatype" : "float",
-#                        "values": [density[:,index].tolist(),
-#                                   density_low_error[:,index].tolist(),
-#                                   density_high_error[:,index].tolist(),
-#                                   self.light_meas.data[:,index].tolist(),
-#                                   self.light_meas.error[:,index].tolist(),
-#                                   self.light_recon.data[:,index].tolist(),
-#                                   self.dens.coordinate('Device x')[0][:,index].tolist(),
-#                                   self.dens.coordinate('Device y')[0][:,index].tolist(),
-#                                   self.dens.coordinate('Device z')[0][:,index].tolist()],
-#                        "dimensions": [int(element) for element in self.dimensions]}
+        spat_coord = np.unique(np.unique(self.dens.coordinate('Beam axis')[0]))
+        index=0
+        for location in spat_coord:
+            index = index + 1
+            dens_loc = self.dens.slice_data(slicing={'Beam axis':location})
+            density = dens_loc.data*1e19
+            density_low_error = (density-dens_loc.error*1e19).clip(0)
+            density_high_error = density+dens_loc.error*1e19
+            light_meas_loc = self.light_meas.slice_data(slicing={'Beam axis':location})
             self.data = {
-                        "datatype" : "float",
-                        "values": [density[:,index].tolist(),
-                                   density_low_error[:,index].tolist(),
-                                   density_high_error[:,index].tolist(),
-                                   self.light_meas.data[:,index].tolist(),
-                                   self.light_meas.error[:,index].tolist(),
-                                   self.dens.coordinate('Device x')[0][:,index].tolist(),
-                                   self.dens.coordinate('Device y')[0][:,index].tolist(),
-                                   self.dens.coordinate('Device z')[0][:,index].tolist()],
-                        "dimensions": [int(element) for element in self.dimensions]}
+                    "datatype" : "float",
+                    "values": [density.tolist(),
+                               density_low_error.tolist(),
+                               density_high_error.tolist(),
+                               light_meas_loc.data.tolist(),
+                               light_meas_loc.error.tolist(),
+                               dens_loc.coordinate('Device x')[0].tolist(),
+                               dens_loc.coordinate('Device y')[0].tolist(),
+                               dens_loc.coordinate('Device z')[0].tolist()],
+                    "dimensions": [int(element) for element in self.dimensions]}
             volume_name = "vol_"+str(index+1+self.minindex)
-            temp[volume_name]=json.dumps(self.data).encode('utf-8')
+            temp[volume_name] = json.dumps(self.data).encode('utf-8')
         self.json["data"] = temp
         
     def set_params(self):
@@ -940,41 +940,68 @@ class WriteABESSignal(GetSignal):
                 }
         self.json["params"] = json.dumps(self.params).encode('utf-8')
     
-    def create_version(self):
-        version = { 
-                "versionInfo" : [ 
-                        {
-                                "reason": "first version of data",
-                                "producer": "vm",
-                                "code_release": "v"+str(self.version),
-                                "analysis_environment": ""
-                                }
-                        ]
-                }
-        json_version = json.dumps(version).encode('utf-8')
-        url='http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
-        for key in self.json["data"].keys():
-                url_data = url + key  + "_DATASTREAM"+"/_versions.json"
-                url_parms = url + key  + "_PARLOG"+"/_versions.json"
-                
-                req = urllib.request.Request(url_data)
-                req.add_header('Content-Type', 'application/json; charset=utf-8')
-                urllib.request.urlopen(req, json_version)
-                req = urllib.request.Request(url_parms)
-                req.add_header('Content-Type', 'application/json; charset=utf-8')
-                urllib.request.urlopen(req, json_version)
-    
-    def upload_json(self):
+    def create_version(self, sandbox=False):
+        try:
+            version = { 
+                    "versionInfo" : [ 
+                            {
+                                    "reason": "updated reconstruction and error approximation method",
+                                    "producer": "mive",
+                                    "code_release": "v"+str(self.version),
+                                    "analysis_environment": "flap"
+                                    }
+                            ]
+                    }
+            json_version = json.dumps(version).encode('utf-8')
+            if sandbox is True:
+                url='http://archive-webapi.ipp-hgw.mpg.de/Sandbox/raw/W7X/QSI/'
+            else:
                 url='http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
-                for key in self.json["data"].keys():
-                    url_parms  = url + key+"_PARLOG/V"+str(self.version)
-                    req = urllib.request.Request(url_parms)
-                    req.add_header('Content-Type', 'application/json; charset=utf-8')
-                    urllib.request.urlopen(req, self.json["params"])
-                    url_data = url + key+"_DATASTREAM/V"+str(self.version)
+            
+            for key in self.json["data"].keys():
+                    url_data = url + key  + "_DATASTREAM"+"/_versions.json"
+                    url_parms = url + key  + "_PARLOG"+"/_versions.json"
+                    
+                    
                     req = urllib.request.Request(url_data)
                     req.add_header('Content-Type', 'application/json; charset=utf-8')
-                    urllib.request.urlopen(req, self.json["data"][key])
+    #                req.get_method = lambda: "POST"
+                    urllib.request.urlopen(req, json_version)
+                    req = urllib.request.Request(url_parms)
+                    req.add_header('Content-Type', 'application/json; charset=utf-8')
+                    urllib.request.urlopen(req, json_version)
+        except urllib.error.HTTPError as e:
+            print(e)
+            print(e.headers)
+        
+    def upload_json(self, sandbox=None):
+        try:
+            if hasattr(self, 'sandbox') and sandbox == None:
+                sandbox =self.sandbox
+            if sandbox is True:
+                url='http://archive-webapi.ipp-hgw.mpg.de/Sandbox/raw/W7X/QSI/'
+            else:
+                url='http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
+    
+            for key in self.json["data"].keys():
+                if sandbox is True:
+                    url_parms  = url + key+"_PARLOG"
+                else:
+                    url_parms  = url + key+"_PARLOG/V"+str(self.version)
+                req = urllib.request.Request(url_parms)
+                req.add_header('Content-Type', 'application/json; charset=utf-8')
+                urllib.request.urlopen(req, self.json["params"])
+                if sandbox is True:
+                    url_data = url + key+"_DATASTREAM"
+                else:
+                    url_data = url + key+"_DATASTREAM/V"+str(self.version)
+                req = urllib.request.Request(url_data)
+                req.add_header('Content-Type', 'application/json; charset=utf-8')
+                urllib.request.urlopen(req, self.json["data"][key])
+        except urllib.error.HTTPError as e:
+            print(e)
+            print(e.headers)
+            raise urllib.error.HTTPError(e)
 
 def register(data_source=None):
     flap.register_data_source('W7X_WEBAPI', get_data_func=get_data, add_coord_func=add_coordinate)
