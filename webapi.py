@@ -327,15 +327,14 @@ class GetSignal(object):
             abes_dict['x_coord'] = '5/x_coord/'
             abes_dict['y_coord'] = '6/y_coord/'
             if stream_type == 'data':
-                location_string = 'Test/raw/W7X/QSI2/vol_' + volume + '_DATASTREAM/V' + version + \
+                location_string = 'Test/raw/W7X/QSI/vol_' + volume + '_DATASTREAM/V' + version + \
                     '/' + abes_dict[quantity]
             elif stream_type == 'param':
-                location_string = 'Test/raw/W7X/QSI2/vol_' + volume + '_PARLOG/V' + version \
+                location_string = 'Test/raw/W7X/QSI/vol_' + volume + '_PARLOG/V' + version \
                     + '/parms/' + abes_dict[quantity]
             
             if sandbox is True:
                 location_string = location_string.replace("Test", "Sandbox")
-            print(location_string)
             return location_string
 
         else:
@@ -976,19 +975,19 @@ class WriteABESSignal(GetSignal):
                     print('error for creating version for '+key)
                     print(e)
                     print(e.headers)
-        
+
     def upload_json(self, sandbox=None):
             if hasattr(self, 'sandbox') and sandbox == None:
-                sandbox =self.sandbox
+                sandbox = self.sandbox
             if sandbox is True:
-                url='http://archive-webapi.ipp-hgw.mpg.de/Sandbox/raw/W7X/QSI/'
+                url = 'http://archive-webapi.ipp-hgw.mpg.de/Sandbox/raw/W7X/QSI/'
             else:
-                url='http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
+                url = 'http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
     
             for key in self.json["data"].keys():
                 print('uploading '+key)
                 try:
-                    url_parms  = url + key+"_PARLOG/V"+str(self.version)
+                    url_parms = url + key+"_PARLOG/V"+str(self.version)
                     req = urllib.request.Request(url_parms)
                     req.add_header('Content-Type', 'application/json; charset=utf-8')
                     urllib.request.urlopen(req, self.json["params"])
@@ -1000,12 +999,14 @@ class WriteABESSignal(GetSignal):
                     print(e)
                     print(e.headers)
 
+
 def register(data_source=None):
     flap.register_data_source('W7X_WEBAPI', get_data_func=get_data, add_coord_func=add_coordinate)
 
-#-----------------------------------------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------------------------------------
-#-----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+
 
 class Points3D:
     '''
@@ -1081,7 +1082,7 @@ class Points3D:
             if self.ref_eq:
                 url = 'http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/'+self.ref_eq+'/reff.json?'
             else:
-                info = 'Points3D ' + func_name + 'error: No data at ' + url + "\n" + \
+                info = 'Points3D ' + shotID + 'error: No data at ' + url + "\n" + \
                         "The information at http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref may help"
                 logger.error(info)
                 print(info)
@@ -1089,11 +1090,12 @@ class Points3D:
         for point in self.xyz:
             url_str = url + 'x='+str(point[0])+'&y='+str(point[1])+'&z='+str(point[2])
             data = GetSignal.url_request(url_str)
-            self.reff = np.append(self.reff, data['reff'][0])            
+            self.reff = np.append(self.reff, data['reff'][0])
+
 
 def get_lcfs(shotID, phi):
     """
-    Used for getting the location of the last closed flux surface at a given phi location. 
+    Used for getting the location of the last closed flux surface at a given phi location.
     Phi should be given in degrees
     Return the r and z coordinates
     """
@@ -1107,8 +1109,8 @@ def get_lcfs(shotID, phi):
         print(info)
         return -1
     data = GetSignal.url_request(url)
-    r =  data['lcfs'][0]['x1']
-    z =  data['lcfs'][0]['x3']
+    r = data['lcfs'][0]['x1']
+    z = data['lcfs'][0]['x3']
     return r, z
 
 
