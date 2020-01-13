@@ -51,7 +51,8 @@ class GetSignal(object):
         self.resample_query = ""
         self.url = ""
 
-    def url_request(self, url_str):
+    @staticmethod
+    def url_request(url_str):
         """
         This function handles an url request for the W7X archive system.
 
@@ -305,6 +306,11 @@ class GetSignal(object):
             split_out = signal_id.split('-')
             version = split_out[1]
             version = version[1:]
+            if version[-1] == 'S' or version[-1] == 's':
+                version = version[:-1]
+                sandbox = True
+            else:
+                sandbox = False
             quantity = split_out[2]
             stream_type = split_out[3]
             volume = split_out[4]
@@ -326,6 +332,9 @@ class GetSignal(object):
             elif stream_type == 'param':
                 location_string = 'Test/raw/W7X/QSI/vol_' + volume + '_PARLOG/V' + version \
                     + '/parms/' + abes_dict[quantity]
+            
+            if sandbox is True:
+                location_string = location_string.replace("Test", "Sandbox")
             return location_string
 
         else:
@@ -500,9 +509,10 @@ class ABESData(VectorData):
         def __init__(self, signal_id, signal_types=None, volumes=None):
             # signal_id is expected to be in the form 'TS-v20'
             if signal_types is None:
-                signal_types = ['density', 'density_error_low', 'density_error_high', 'meas_light', 'meas_light_error']
+                signal_types = ['density', 'density_error_low', 'density_error_high', 'meas_light', 'meas_light_error',
+                                'x_coord', 'y_coord']
 
-            param_types = ['x_coord-data', 'y_coord-data']
+            param_types = None # ['x_coord-data', 'y_coord-data']
 
             if volumes is None:
                 volumes = np.linspace(1, 30, num=30, dtype=int)
@@ -542,7 +552,6 @@ class ABESData(VectorData):
 def conv_scalar_to_dataobj(data, url, data_name, exp_id, options):
     """Converts the ScalarData obtained by the code to DataObject class of flap
     """
-    print(data.keys())
     if not data['dimensionCount'] == 1:
         raise TypeError('conv_scalar_to_dataobj is incompatible with higher than one dimensional data, ' +
                         'current data dimension: '+str(data['dimensionCount']))
@@ -631,7 +640,7 @@ def conv_aug2_to_dataobj(data, url, data_name, exp_id, options):
     time_sample = flap.Coordinate(name='Sample', unit='1', mode=flap.CoordinateMode(equidistant=True), shape=shape,
                                   start=1, step=[1], dimension_list=[0])
     channel_coord = flap.Coordinate(name='Channel', unit='', mode=flap.CoordinateMode(equidistant=True),
-                                    shape=[np.shape(data['values'])[1]], start=1, step=np.asarray([1]), dimension_list=[1])
+                                    shape=[np.shape(data['values'])[1]], start=1, step=[1], dimension_list=[1])
     wavelength_coord = flap.Coordinate(name='Wavelength', unit='', mode=flap.CoordinateMode(equidistant=True),
                                        shape=[np.shape(data['values'])[2]], start=0, step=np.asarray([1]), dimension_list=[2])
 
@@ -834,7 +843,7 @@ def add_coordinate(data_object, new_coordinates, options=None):
 # ----------------------------------------------------------------------------------------------------------------------
 
 class WriteABESSignal(GetSignal):
-    def __init__(self, datalist, shotid, minindex, version=1.0):
+    def __init__(self, datalist, shotid, minindex=0, version=1.0):
         self.dens = datalist[0]
         self.light_meas = datalist[1]
 #        self.light_recon = datalist[2]
@@ -861,40 +870,32 @@ class WriteABESSignal(GetSignal):
     def set_data(self):
         #setting the time
         [from_time, upto_time] = self.shotid_time_gen()
-        time_vec=self.dens.coordinate('Time')[0][:,0]
+        time_vec=np.unique(self.dens.coordinate('Time')[0])
         self.dimensions = [from_time + decimal.Decimal(int(time_vec[index]*1e9)) for index in range(0,len(time_vec))]
-        density = self.dens.data*1e19
-        density_low_error = self.dens.error[0]*1e19
-        density_high_error = self.dens.error[1]*1e19
-        
-        chanNum = len(self.dens.coordinate('Device x')[0][0,:].tolist())
+
         temp = {}
-        for index in range(0,chanNum):
-#            self.data = {
-#                        "datatype" : "float",
-#                        "values": [density[:,index].tolist(),
-#                                   density_low_error[:,index].tolist(),
-#                                   density_high_error[:,index].tolist(),
-#                                   self.light_meas.data[:,index].tolist(),
-#                                   self.light_meas.error[:,index].tolist(),
-#                                   self.light_recon.data[:,index].tolist(),
-#                                   self.dens.coordinate('Device x')[0][:,index].tolist(),
-#                                   self.dens.coordinate('Device y')[0][:,index].tolist(),
-#                                   self.dens.coordinate('Device z')[0][:,index].tolist()],
-#                        "dimensions": [int(element) for element in self.dimensions]}
+        spat_coord = np.unique(np.unique(self.dens.coordinate('Beam axis')[0]))
+        index=0
+        for location in spat_coord:
+            index = index + 1
+            dens_loc = self.dens.slice_data(slicing={'Beam axis':location})
+            density = dens_loc.data*1e19
+            density_low_error = (density-dens_loc.error*1e19).clip(0)
+            density_high_error = density+dens_loc.error*1e19
+            light_meas_loc = self.light_meas.slice_data(slicing={'Beam axis':location})
             self.data = {
-                        "datatype" : "float",
-                        "values": [density[:,index].tolist(),
-                                   density_low_error[:,index].tolist(),
-                                   density_high_error[:,index].tolist(),
-                                   self.light_meas.data[:,index].tolist(),
-                                   self.light_meas.error[:,index].tolist(),
-                                   self.dens.coordinate('Device x')[0][:,index].tolist(),
-                                   self.dens.coordinate('Device y')[0][:,index].tolist(),
-                                   self.dens.coordinate('Device z')[0][:,index].tolist()],
-                        "dimensions": [int(element) for element in self.dimensions]}
+                    "datatype" : "float",
+                    "values": [density.tolist(),
+                               density_low_error.tolist(),
+                               density_high_error.tolist(),
+                               light_meas_loc.data.tolist(),
+                               light_meas_loc.error.tolist(),
+                               dens_loc.coordinate('Device x')[0].tolist(),
+                               dens_loc.coordinate('Device y')[0].tolist(),
+                               dens_loc.coordinate('Device z')[0].tolist()],
+                    "dimensions": [int(element) for element in self.dimensions]}
             volume_name = "vol_"+str(index+1+self.minindex)
-            temp[volume_name]=json.dumps(self.data).encode('utf-8')
+            temp[volume_name] = json.dumps(self.data).encode('utf-8')
         self.json["data"] = temp
         
     def set_params(self):
@@ -938,36 +939,55 @@ class WriteABESSignal(GetSignal):
                             }],
                 "dimensions": [int(element) for element in self.dimensions]
                 }
-        self.json["params"] = json.dumps(self.params).encode('utf-8')
+        self.json["params"] = json.dumps(self.params).encode('utf-16')
     
-    def create_version(self):
-        version = { 
-                "versionInfo" : [ 
-                        {
-                                "reason": "first version of data",
-                                "producer": "vm",
-                                "code_release": "v"+str(self.version),
-                                "analysis_environment": ""
-                                }
-                        ]
-                }
-        json_version = json.dumps(version).encode('utf-8')
-        url='http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
-        for key in self.json["data"].keys():
-                url_data = url + key  + "_DATASTREAM"+"/_versions.json"
-                url_parms = url + key  + "_PARLOG"+"/_versions.json"
-                
-                req = urllib.request.Request(url_data)
-                req.add_header('Content-Type', 'application/json; charset=utf-8')
-                urllib.request.urlopen(req, json_version)
-                req = urllib.request.Request(url_parms)
-                req.add_header('Content-Type', 'application/json; charset=utf-8')
-                urllib.request.urlopen(req, json_version)
-    
-    def upload_json(self):
+    def create_version(self, sandbox=False):
+            version = { 
+                    "versionInfo" : [ 
+                            {
+                                    "reason": "updated reconstruction and error approximation method",
+                                    "producer": "mive",
+                                    "code_release": "v"+str(self.version),
+                                    "analysis_environment": "flap"
+                                    }
+                            ]
+                    }
+            json_version = json.dumps(version).encode('utf-16')
+            if sandbox is True:
+                url='http://archive-webapi.ipp-hgw.mpg.de/Sandbox/raw/W7X/QSI/'
+            else:
                 url='http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
-                for key in self.json["data"].keys():
-                    url_parms  = url + key+"_PARLOG/V"+str(self.version)
+            
+            for key in self.json["data"].keys():
+                try:
+                    url_data = url + key  + "_DATASTREAM"+"/_versions.json"
+                    url_parms = url + key  + "_PARLOG"+"/_versions.json"
+                    
+                    
+                    req = urllib.request.Request(url_data)
+                    req.add_header('Content-Type', 'application/json; charset=utf-16')
+    #                req.get_method = lambda: "POST"
+                    urllib.request.urlopen(req, json_version)
+                    req = urllib.request.Request(url_parms)
+                    req.add_header('Content-Type', 'application/json; charset=utf-16')
+                    urllib.request.urlopen(req, json_version)
+                except urllib.error.HTTPError as e:
+                    print('error for creating version for '+key)
+                    print(e)
+                    print(e.headers)
+
+    def upload_json(self, sandbox=None):
+            if hasattr(self, 'sandbox') and sandbox == None:
+                sandbox = self.sandbox
+            if sandbox is True:
+                url = 'http://archive-webapi.ipp-hgw.mpg.de/Sandbox/raw/W7X/QSI/'
+            else:
+                url = 'http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
+    
+            for key in self.json["data"].keys():
+                print('uploading '+key)
+                try:
+                    url_parms = url + key+"_PARLOG/V"+str(self.version)
                     req = urllib.request.Request(url_parms)
                     req.add_header('Content-Type', 'application/json; charset=utf-8')
                     urllib.request.urlopen(req, self.json["params"])
@@ -975,6 +995,133 @@ class WriteABESSignal(GetSignal):
                     req = urllib.request.Request(url_data)
                     req.add_header('Content-Type', 'application/json; charset=utf-8')
                     urllib.request.urlopen(req, self.json["data"][key])
+                except urllib.error.HTTPError as e:
+                    print(e)
+                    print(e.headers)
+
 
 def register(data_source=None):
     flap.register_data_source('W7X_WEBAPI', get_data_func=get_data, add_coord_func=add_coordinate)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+
+
+class Points3D:
+    '''
+    Used for storing a number of points and to perform coordinate transformations
+    If a point is added in either xyz of radius - theta - z coordinates, an automatic transformation to
+    the other coordinate system is performed. Not yet compatible with FLAP coordinates
+    '''
+
+    __module__ = "customfiles.InternalData"
+
+    def __init__(self):
+        self.xyz = np.empty([0, 3])  # point coordinates in stellarator xyz
+        self.rtz = np.empty([0, 3])  # point coordinates in stellarator radius-theta-z coordinates
+        self.reff = np.empty([0])  # a vector storing the effective radius of every point
+        self.shotID = None
+        self.ref_eq = None  # the w7x vmec equilibrium reference ID of the shot
+
+    def append_xyz(self, xyz_list):
+        '''
+        Add points to the object based on their xyz coordinates. xyz_list has to be
+        either a numpy array of length 3 defining the point location, or a two-dimensional
+        numpy array.
+        '''
+        if xyz_list.ndim == 1:
+            xyz_list = np.asarray([xyz_list])
+        self.xyz = np.append(self.xyz, xyz_list, axis=0)
+        self.rtz = self.xyz_to_rtz(self.xyz)
+
+    def append_rtz(self, rtz_list):
+        '''
+        Add points to the object based on their rtz coordinates. rtz_list has to be
+        either a numpy array of length 3 defining the point location, or a two-dimensional
+        numpy array.
+        '''
+        if rtz_list.ndim == 1:
+            rtz_list = np.asarray([rtz_list])
+        self.rtz = np.append(self.rtz, rtz_list, axis=0)
+        self.xyz = self.rtz_to_xyz(self.rtz)
+
+    @staticmethod
+    def rtz_to_xyz(rtz_list):
+        '''
+        Convert rtz coordinates to xyz and returns the value. rtz_list has to be
+        either a numpy array of length 3 defining the point location, or a two-dimensional
+        numpy array. Practically list of points.
+        '''
+        if rtz_list.ndim == 1:
+            rtz_list = np.asarray([rtz_list])
+        x_list = rtz_list[:, 0]*np.cos(rtz_list[:, 1])
+        y_list = rtz_list[:, 0]*np.sin(rtz_list[:, 1])
+        return np.squeeze(np.transpose([x_list, y_list, rtz_list[:, 2]]))
+
+    @staticmethod
+    def xyz_to_rtz(xyz_list):
+        '''
+        Convert xyz coordinates to rtz and returns the value. xyz_list has to be
+        either a numpy array of length 3 defining the point location, or a two-dimensional
+        numpy array. Practically list of points.
+        '''
+        if xyz_list.ndim == 1:
+            xyz_list = np.asarray([xyz_list])
+        r_list = np.linalg.norm(xyz_list[:, 0:2], axis=1)
+        t_list = np.arctan2(xyz_list[:, 1], xyz_list[:, 0])
+        return [np.squeeze(np.transpose([r_list, t_list, xyz_list[:, 2]]))]
+
+    def xyz_to_reff(self, shotID=None):
+        '''
+        Obtain the effective radius based on self.xyz of the object and vmec results
+        '''
+        if shotID:
+            self.shotID = shotID
+            self.ref_eq = get_refeq(shotID)
+            if self.ref_eq:
+                url = 'http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/'+self.ref_eq+'/reff.json?'
+            else:
+                info = 'Points3D ' + shotID + 'error: No data at ' + url + "\n" + \
+                        "The information at http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref may help"
+                logger.error(info)
+                print(info)
+        self.reff = np.empty([0])
+        for point in self.xyz:
+            url_str = url + 'x='+str(point[0])+'&y='+str(point[1])+'&z='+str(point[2])
+            data = GetSignal.url_request(url_str)
+            self.reff = np.append(self.reff, data['reff'][0])
+
+
+def get_lcfs(shotID, phi):
+    """
+    Used for getting the location of the last closed flux surface at a given phi location.
+    Phi should be given in degrees
+    Return the r and z coordinates
+    """
+    ref_eq = get_refeq(shotID)
+    if ref_eq:
+        url = 'http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/'+ref_eq+'/lcfs.json?phi='+str(phi)
+    else:
+        info = 'No refrence ID for shot' + str(shotID) + "\n" + \
+                "The information at http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref may help"
+        logger.error(info)
+        print(info)
+        return -1
+    data = GetSignal.url_request(url)
+    r = data['lcfs'][0]['x1']
+    z = data['lcfs'][0]['x3']
+    return r, z
+
+
+def get_refeq(shotID):
+    """
+    Used for getting the reference number for a w7x configurations from a shotID
+    Input of shotID is a string, output is a sting in the format e.g. w7x_ref_120
+    """
+    source_stream = 'ArchiveDB/raw/W7XAnalysis/Equilibrium/RefEq_PARLOG/V1/parms/equilibriumID/'
+    refeq = GetSignal(source_stream)
+    refeq.shotid_time_query_gen(shotID)
+    data = refeq.archive_pull()
+    ref_eq = data['values'][0]
+    return ref_eq
