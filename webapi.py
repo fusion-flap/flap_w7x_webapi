@@ -84,6 +84,8 @@ class GetSignal(object):
             return None
 
         url.close()
+        if data == None:
+            warnings.warn('Data missing at '+url_str)
 
         return data
 
@@ -98,7 +100,8 @@ class GetSignal(object):
         """
         base = 'http://archive-webapi.ipp-hgw.mpg.de/'
         self.url = base + self.stream + self.time_query + self.resample_query
-        return self.url_request(self.url)
+        data = self.url_request(self.url)
+        return data
 
     def time_query_gen(self, start, stop):
         """This function gives back the time_query string for the requested data
@@ -245,9 +248,26 @@ class GetSignal(object):
             'ArchiveDB/raw/W7X/CoDaStationDesc.12/DataModuleDesc.16_DATASTREAM/8/ACM51%20_%20ACG%2058%20Module%205%20upper/unscaled/'
         stream_dict['ACM59'] = \
             'ArchiveDB/raw/W7X/CoDaStationDesc.12/DataModuleDesc.16_DATASTREAM/8/ACM51%20_%20ACG%2058%20Module%205%20upper/unscaled/'
+            
 
         if signal_id in stream_dict:
             return stream_dict[signal_id]
+        elif signal_id[0:4] == 'Zeff':
+            # signal format expected Zeff-v20-data
+            split_out = signal_id.split('-')
+            version = split_out[1]
+            version = version[1:]
+            stream_type = split_out[2]
+            if stream_type == 'data':
+                location_string = \
+                    'Test/raw/Minerva2/Minerva.Zeff.AEZ40-AET40.USB-Spectrometer/Zeff_mean_DATASTREAM/V'+version+"/0/Zeff_mean/"
+            elif stream_type == 'param':
+                location_string = \
+                    'Test/raw/Minerva2/Minerva.Zeff.AEZ40-AET40.USB-Spectrometer/Zeff_mean_PARLOG/V'+version+"/0/Zeff_mean/"
+            elif stream_type == 'err':
+                location_string = \
+                    'Test/raw/Minerva2/Minerva.Zeff.AEZ40-AET40.USB-Spectrometer/Zeff_std_DATASTREAM/V'+version+"/0/Zeff_std/"      
+            return location_string
         elif signal_id[0:2] == 'TS':
             # Thomson scattering, expected string format e.g. TS-v20-ne_map-vol1
             # That would correspond to the version 20, volume 1 data for the
@@ -402,7 +422,10 @@ class ScalarDataList():
 
     """
     def __init__(self, data_list, from_time=None, data_source_obj=None):
-        self.list = [ScalarData(data, from_time=from_time, data_source_obj=data_source_obj) for data in data_list]
+        self.list = []
+        for data in data_list:
+            if data is not None:
+                self.list.append(ScalarData(data, from_time=from_time, data_source_obj=data_source_obj))
 
     def __getattr__(self, name):
         """
@@ -427,6 +450,10 @@ class VectorData():
         By using the SignalList class, the necessary structure for reading the
         data and the parameters are defined
         """
+        self.signals = []
+        self.params = []
+        self.signal_types = []
+        self.param_types = []
         if not (signal_types is None):
             self.signal_types = signal_types
             signal_names = [[signal_id+'-'+signal_type+'-data-vol'+str(vol_index) for vol_index in volumes]
@@ -448,6 +475,7 @@ class VectorData():
                          for data in archive_pull_out]
         if hasattr(self, "params"):
             archive_pull_out = [[param_id.archive_pull() for param_id in param.list] for param in self.params]
+            print(archive_pull_out)
             self.params = [ScalarDataList(data, from_time=self.signals[0].list[0].from_time)
                            for data in archive_pull_out]
 
@@ -519,6 +547,8 @@ class ABESData(VectorData):
 
             VectorData.__init__(self, signal_id, signal_types=signal_types, param_types=param_types,
                                 volumes=volumes)
+            self.data = []
+            self.params = []
 
         def get_data(self):
             """
@@ -681,17 +711,17 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
             else:
                     info = info+"Time variable is not equidistant, deviation: "+str(equidistance)+os.linesep
 
-    shape = list(np.shape(data.data_struct[data.signal_types[0]]))
+    shape = list(np.shape(np.transpose(data.data_struct[data.signal_types[0]])))
 
     if equidistant is True:
-        time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
+        time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=[shape[0]],
                                      start=start, step=[step], dimension_list=[0])
     else:
-        time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=shape,
+        time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=[shape[0]],
                                      values=np.asarray(data.data[0].list[0].time), dimension_list=[0])
 
     # Temporal sample coord
-    time_sample = flap.Coordinate(name='Sample', unit='1', mode=flap.CoordinateMode(equidistant=True), shape=shape,
+    time_sample = flap.Coordinate(name='Sample', unit='1', mode=flap.CoordinateMode(equidistant=True), shape=[shape[0]],
                                   start=1, step=[1], dimension_list=[0])
 
     coords = [time_coord, time_sample]
@@ -699,7 +729,7 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
     index = 0
     for params in data.param_types:
         param_coord = flap.Coordinate(name=data.params[index].list[0].label, unit=data.params[index].list[0].unit,
-                                      mode=flap.CoordinateMode(equidistant=False), shape=shape,
+                                      mode=flap.CoordinateMode(equidistant=False), shape=[shape[1]],
                                       values=np.asarray(data.data_struct[params]), dimension_list=[1])
         index = index+1
         coords.append(param_coord)
@@ -715,7 +745,7 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
     return d
 
 
-def get_data(exp_id=None, data_name=None, no_data=False, options=None, coordinates=None, data_source=None):
+def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates=None, data_source=None):
     """ Data read function for the W7-X Alkali BES diagnostic
     data_name: should be a string, currently either:
         ECRH
@@ -739,6 +769,18 @@ def get_data(exp_id=None, data_name=None, no_data=False, options=None, coordinat
         Check Time Equidistant - if set and True, then the data is checked if it is equidistant in time.
                               it is assumed to be equidistant, if the difference between the timesteps relatively small
     """
+
+    options_default = {'Cache Data': True}
+    options = {**options_default, **options}
+    
+    #checking if the data is already in the cache
+    curr_path = os.path.dirname(os.path.abspath(__file__))
+    location = os.path.sep.join(curr_path.split(os.path.sep))
+    source = data_name.lower().split("/")
+    filename = os.path.join(os.path.sep.join([location,"cached"]),
+                            ('_'.join(source)+"-"+str(exp_id)+".hdf5").lower())
+    if os.path.exists(filename):
+        return flap.load(filename)
 
     if no_data:
         raise NotImplementedError('no data input is not implemented yet.')
@@ -764,7 +806,7 @@ def get_data(exp_id=None, data_name=None, no_data=False, options=None, coordinat
     start_shift = decimal.Decimal(0)
     if coordinates is not None:
         coord = coordinates[0]
-        if (coord.unit.name == 'Time [s]') and (coord.mode.equidistant):
+        if (coord.unit.name == 'Time') and (coord.mode.equidistant):
                 read_range = [float(coord.c_range[0]), float(coord.c_range[1])]
         else:
             raise ValueError("Only timeranges may be defined for reading")
@@ -831,6 +873,9 @@ def get_data(exp_id=None, data_name=None, no_data=False, options=None, coordinat
             d = conv_aug2_to_dataobj(data, data_setup.url, data_name, exp_id, options)
         else:
             d = conv_scalar_to_dataobj(data, data_setup.url, data_name, exp_id, options)
+
+    if options["Cache Data"] is True:
+        flap.save(d, filename)
     return d
 
 
