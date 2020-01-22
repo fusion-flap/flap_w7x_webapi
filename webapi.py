@@ -537,10 +537,9 @@ class ABESData(VectorData):
         def __init__(self, signal_id, signal_types=None, volumes=None):
             # signal_id is expected to be in the form 'TS-v20'
             if signal_types is None:
-                signal_types = ['density', 'density_error_low', 'density_error_high', 'meas_light', 'meas_light_error',
-                                'x_coord', 'y_coord']
+                signal_types = ['density', 'density_error_low', 'density_error_high', 'meas_light', 'meas_light_error']
 
-            param_types = None # ['x_coord-data', 'y_coord-data']
+            param_types = ['x_coord-data', 'y_coord-data']
 
             if volumes is None:
                 volumes = np.linspace(1, 30, num=30, dtype=int)
@@ -548,7 +547,7 @@ class ABESData(VectorData):
             VectorData.__init__(self, signal_id, signal_types=signal_types, param_types=param_types,
                                 volumes=volumes)
             self.data = []
-            self.params = []
+
 
         def get_data(self):
             """
