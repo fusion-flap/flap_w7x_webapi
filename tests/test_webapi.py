@@ -13,6 +13,7 @@ def test_basic():
     ecrh = webapi.GetSignal('ECRH')
     start = datetime.datetime(2018, 8, 22, 10, 46, 53)
     end = datetime.datetime(2018, 8, 22, 10, 47, 8)
+    start = datetime.datetime(2018, 10, 17, 13, 23, )
     ecrh.time_query_gen(start, end)
     ecrh_data = ecrh.archive_pull()
     return int(np.mean(ecrh_data["values"]))

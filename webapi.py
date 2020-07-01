@@ -352,7 +352,6 @@ class GetSignal(object):
             elif stream_type == 'param':
                 location_string = 'Test/raw/W7X/QSI/vol_' + volume + '_PARLOG/V' + version \
                     + '/parms/' + abes_dict[quantity]
-            
             if sandbox is True:
                 location_string = location_string.replace("Test", "Sandbox")
             return location_string
@@ -475,7 +474,6 @@ class VectorData():
                          for data in archive_pull_out]
         if hasattr(self, "params"):
             archive_pull_out = [[param_id.archive_pull() for param_id in param.list] for param in self.params]
-            print(archive_pull_out)
             self.params = [ScalarDataList(data, from_time=self.signals[0].list[0].from_time)
                            for data in archive_pull_out]
 
@@ -893,7 +891,7 @@ class WriteABESSignal(GetSignal):
 #        self.light_recon = datalist[2]
         self.shotid = shotid
         self.minindex = minindex
-        self.version = version
+        self.version = int(version)
         self.json={}
 #        self.set_params(data,shotid)
 #        self.set_data(data)
@@ -1001,7 +999,6 @@ class WriteABESSignal(GetSignal):
                 url='http://archive-webapi.ipp-hgw.mpg.de/Sandbox/raw/W7X/QSI/'
             else:
                 url='http://archive-webapi.ipp-hgw.mpg.de/Test/raw/W7X/QSI/'
-            
             for key in self.json["data"].keys():
                 try:
                     url_data = url + key  + "_DATASTREAM"+"/_versions.json"
