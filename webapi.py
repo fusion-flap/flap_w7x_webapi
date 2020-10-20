@@ -249,6 +249,16 @@ class GetSignal(object):
         stream_dict['ACM59'] = \
             'ArchiveDB/raw/W7X/CoDaStationDesc.12/DataModuleDesc.16_DATASTREAM/8/ACM51%20_%20ACG%2058%20Module%205%20upper/unscaled/'
             
+        
+        # ECE signals
+        for chnum in range(32):
+            channel = "{:02d}".format(chnum+1)
+            stream_dict['ECE'+channel] = ['ArchiveDB/views/KKS/QME_ECE/standard_reduced/QME-ch'+channel]
+
+
+        # This is EDICAM at the AEQ11 port:
+        stream_dict['EDICAM-AEQ11'] = \
+            'ArchiveDB/raw/W7X/QSV_VideoCameras_Edicam_AEQ11/ROIP1Data_DATASTREAM/0/image/unscaled'
 
         if signal_id in stream_dict:
             return stream_dict[signal_id]
