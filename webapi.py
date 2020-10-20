@@ -253,14 +253,14 @@ class GetSignal(object):
         # ECE signals
         for chnum in range(32):
             channel = "{:02d}".format(chnum+1)
-            stream_dict['ECE'+channel] = ['ArchiveDB/views/KKS/QME_ECE/standard_reduced/QME-ch'+channel]
+            stream_dict['ECE'+channel] = ['ArchiveDB/views/KKS/QME_ECE/standard_reduced/QME-ch'+channel+'/']
 
 
         #Filterscopte
         for chnum in range(72):
             label = 'TUBE'+"{:02d}".format(chnum+1)
             chid = 'PMT0'+"{:02d}".format(chnum+1)
-            stream_dict['QSR02'+label] = 'Test/raw/W7X/Filterscopetest4/'+chid+'_DATASTREAM/V5/0/'+chid+'_Volts
+            stream_dict['QSR02_'+label] = 'Test/raw/W7X/Filterscopetest4/'+chid+'_DATASTREAM/V5/0/'+chid+'_Volts/'
 
         # This is EDICAM at the AEQ11 port:
         stream_dict['EDICAM-AEQ11'] = \
