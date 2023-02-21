@@ -57,15 +57,18 @@ def test_register():
 
 
 def test_reading():
+    import time
+    starttime = time.time()
     flap.register_data_source('W7X_WEBAPI',
                               get_data_func=webapi.get_data,
                               add_coord_func=webapi.add_coordinate)
     d = flap.get_data('W7X_WEBAPI', name='ECRH',
-                      exp_id='20180912.012',
+                      exp_id='20181016.032',
                       options={'Scale Time': True,
                                'Check Time Equidistant': True,
-                               'Cache Data': False},
+                               'Cache Data': True},
                       object_name='ECRH_data')
+    print(f"Time: {time.time()-starttime}")
     return [d.coordinates[0].mode.equidistant, d.coordinates[0].start]
 
 

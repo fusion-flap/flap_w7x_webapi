@@ -631,6 +631,62 @@ def conv_scalar_to_dataobj(data, url, data_name, exp_id, options):
                         exp_id=exp_id, data_title=data_title, info=info, data_shape=data_shape)
     return d
 
+def conv_matrix_to_dataobj(data, url, data_name, exp_id, options):
+    """Converts the ScalarData obtained by the code to DataObject class of flap
+    """
+
+    info = "Data downloaded from: "+url+os.linesep
+
+    # Constructing the time flap Coordinate
+    name = 'Time'
+    # getting the unit
+    unit = 'ns'
+    if 'Scale Time' in options.keys():
+        if options['Scale Time'] is True:
+            unit = 'Second'
+    # Checking equidistance of time
+    equidistant = False
+    if 'Check Time Equidistant' in options.keys():
+        if options['Check Time Equidistant'] is True:
+            timesteps = np.array(data["dimensions"][1:])-np.array(data["dimensions"][0:-1])
+            equidistance = np.linalg.norm(timesteps-timesteps[0])/np.linalg.norm(timesteps)
+            if equidistance < 1e-6:
+                info = info+"Time variable is taken as equidistant to an accuracy of "+str(equidistance)+os.linesep
+                equidistant = True
+                start = data["dimensions"][0]
+                step = np.mean(timesteps)
+            else:
+                    info = info+"Time variable is not equidistant, deviation: "+str(equidistance)+os.linesep
+    shape = [data['dimensionSize']]
+
+    if equidistant is True:
+        time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
+                                     start=start, step=[step], dimension_list=[0])
+    else:
+        time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=shape,
+                                     values=np.array(data["dimensions"]), dimension_list=[0])
+
+    # Temporal sample coord
+    time_sample = flap.Coordinate(name='Sample', unit=1, mode=flap.CoordinateMode(equidistant=True), shape=shape,
+                                  start=1, step=[1], dimension_list=[0])
+
+    coords = [time_coord, time_sample]
+
+    # Constructing the DataObject
+    data_unit = flap.Unit(name=data['label'], unit=data['unit'])
+    data_title = data_name
+    data_shape = list(np.shape(data['values']))
+    for buffer_coordinate in range(len(data_shape)-1):
+        buffer_coord = flap.Coordinate(name=f"Coord {buffer_coordinate+1}", unit="n.a.",
+                                       mode=flap.CoordinateMode(equidistant=True), 
+                                       shape=data_shape[buffer_coordinate+1], start=0, step=[1],
+                                       dimension_list=[buffer_coordinate+1])
+        coords += [buffer_coord]
+    #raise ValueError("stop")
+    d = flap.DataObject(data_array=np.array(data['values']), error=None, data_unit=data_unit, coordinates=coords,
+                        exp_id=exp_id, data_title=data_title, info=info, data_shape=data_shape)
+    return d
+
 def conv_aug2_to_dataobj(data, url, data_name, exp_id, options):
     """Converts the ScalarData obtained by the code to DataObject class of flap
     """
@@ -872,7 +928,10 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
         if data_name[0:4] == "AUG-":
             d = conv_aug2_to_dataobj(data, data_setup.url, data_name, exp_id, options)
         else:
-            d = conv_scalar_to_dataobj(data, data_setup.url, data_name, exp_id, options)
+            if data['dimensionCount'] == 1:
+                d = conv_scalar_to_dataobj(data, data_setup.url, data_name, exp_id, options)
+            else:
+                d = conv_matrix_to_dataobj(data, data_setup.url, data_name, exp_id, options)
 
     if options["Cache Data"] is True:
         flap.save(d, filename)
