@@ -608,7 +608,7 @@ def conv_scalar_to_dataobj(data, url, data_name, exp_id, options):
                 step = np.mean(timesteps)
             else:
                     info = info+"Time variable is not equidistant, deviation: "+str(equidistance)+os.linesep
-    shape = [data['dimensionSize']]
+    shape = [len(data["dimensions"])]
 
     if equidistant is True:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
@@ -657,7 +657,7 @@ def conv_matrix_to_dataobj(data, url, data_name, exp_id, options):
                 step = np.mean(timesteps)
             else:
                     info = info+"Time variable is not equidistant, deviation: "+str(equidistance)+os.linesep
-    shape = [data['dimensionSize']]
+    shape = [len(data["dimensions"])]
 
     if equidistant is True:
         time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
