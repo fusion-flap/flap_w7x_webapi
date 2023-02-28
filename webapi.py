@@ -618,7 +618,7 @@ def conv_scalar_to_dataobj(data, url, data_name, exp_id, options):
                                      values=np.array(data["dimensions"]), dimension_list=[0])
 
     # Temporal sample coord
-    time_sample = flap.Coordinate(name='Sample', unit=1, mode=flap.CoordinateMode(equidistant=True), shape=shape,
+    time_sample = flap.Coordinate(name='Sample', unit='Sample number', mode=flap.CoordinateMode(equidistant=True), shape=shape,
                                   start=1, step=[1], dimension_list=[0])
 
     coords = [time_coord, time_sample]
@@ -667,7 +667,7 @@ def conv_matrix_to_dataobj(data, url, data_name, exp_id, options):
                                      values=np.array(data["dimensions"]), dimension_list=[0])
 
     # Temporal sample coord
-    time_sample = flap.Coordinate(name='Sample', unit=1, mode=flap.CoordinateMode(equidistant=True), shape=shape,
+    time_sample = flap.Coordinate(name='Sample', unit='Sample number', mode=flap.CoordinateMode(equidistant=True), shape=shape,
                                   start=1, step=[1], dimension_list=[0])
 
     coords = [time_coord, time_sample]
@@ -824,17 +824,35 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
                      the start of the shot
         Check Time Equidistant - if set and True, then the data is checked if it is equidistant in time.
                               it is assumed to be equidistant, if the difference between the timesteps relatively small
+        Cache Data - Store a local copy of the data so as next time it is read from there
+        Cache Directory - Cache directory name. If None will store data under the source file directory.
     """
 
-    options_default = {'Cache Data': True}
-    options = {**options_default, **options}
+    options_default = {'Cache Data': True,
+                       'Cache Directory': None,
+                       'Scale Time':False,
+                       'Time Start': None,
+                       'Time Stop': None,
+                       'Downsample': None,
+                       'Check Time Equidistant': False
+                       }
+
+    _options = flap.config.merge_options(options_default,options,data_source='W7X_WEBAPI')
+
+#    options = {**options_default, **options}
     
     #checking if the data is already in the cache
     curr_path = os.path.dirname(os.path.abspath(__file__))
     location = os.path.sep.join(curr_path.split(os.path.sep))
     source = data_name.lower().split("/")
-    filename = os.path.join(os.path.sep.join([location,"cached"]),
-                            ('_'.join(source)+"-"+str(exp_id)+".hdf5").lower())
+    if (_options['Cache Directory'] is None):
+        filename = os.path.join(os.path.sep.join([location,"cached"]),
+                                ('_'.join(source)+"-"+str(exp_id)+".hdf5").lower()
+                                )
+    else:
+        filename = os.path.join(_options['Cache Directory'],
+                                ('_'.join(source)+"-"+str(exp_id)+".hdf5").lower()
+                                )
     if os.path.exists(filename):
         return flap.load(filename)
 
@@ -852,10 +870,10 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
         data_setup = GetSignal(data_name)
     # Generating the data relevant time intervals
     if exp_id is None:
-        if not ('Time Start' in options.keys() and 'Time Stop' in options.keys()):
-            raise ValueError("either exp_id should be given, or options should have a start and stop key")
+        if not ((_options['Time Start'] is not None) and (_options['Time Stop'] is not None)):
+            raise ValueError("either exp_id should be given, or options should have a 'Time Start' and 'Time Stop' key.")
         else:
-            data_setup.time_query_gen(options['Time Start'], options['Time Stop'])
+            data_setup.time_query_gen(_options['Time Start'], _options['Time Stop'])
     else:
         data_setup.shotid_time_query_gen(exp_id)
 
@@ -874,9 +892,9 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
         data_setup.time_query = "_signal.json?from=" + str(new_start) + '&upto=' + str(new_stop)
 
     # Downsampling the data if requested
-    if 'Downsample' in options.keys():
+    if _options['Downsample'] is not None:
         warnings.warn('Downsampling requests do not seem to work properly on the W7-X webapi')
-        data_setup.downsamp_gen(options['Downsample'])
+        data_setup.downsamp_gen(_options['Downsample'])
 
     # Converting data to flap.DataObject format
     if get_vector is True:
@@ -904,36 +922,36 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
         vector_data.squeeze()
 
         # Normalizing the time
-        if 'Scale Time' in options.keys():
-            if options['Scale Time'] is True:
-                [x.time_norm() for x in vector_data.data]
-                if coordinates is not None:
-                    coord = coordinates[0]
-                    if (coord.unit.name == 'Time [s]') and (coord.mode.equidistant):
-                        vector_data.data[0].list[0].time = [element + read_range[0] for element in
-                                                            vector_data.data[0].list[0].time]
-                        for x in vector_data.params:                    
-                            x.list[0].time = [element + read_range[0] for element in x.list[0].time]
+        if _options['Scale Time'] is True:
+            [x.time_norm() for x in vector_data.data]
+            if coordinates is not None:
+                coord = coordinates[0]
+                if (coord.unit.name == 'Time [s]') and (coord.mode.equidistant):
+                    vector_data.data[0].list[0].time = [element + read_range[0] for element in
+                                                        vector_data.data[0].list[0].time]
+                    for x in vector_data.params:                    
+                        x.list[0].time = [element + read_range[0] for element in x.list[0].time]
 
-        d = conv_vector_to_dataobj(vector_data, data_setup.url, data_name, exp_id, options)
+        d = conv_vector_to_dataobj(vector_data, data_setup.url, data_name, exp_id, _options)
     else:
         # Downloading data
         data = data_setup.archive_pull()
+        if (data is None):
+            raise IOError("Error reading data from webapi.")
 
         # Normalizing the time
-        if 'Scale Time' in options.keys():
-            if options['Scale Time'] is True:
-                mintime = min(data["dimensions"])+1000000000-start_shift
-                data["dimensions"][:] = [float(i - mintime) * 1.0e-9 for i in data["dimensions"]]
+        if _options['Scale Time'] is True:
+            mintime = min(data["dimensions"])+1000000000-start_shift
+            data["dimensions"][:] = [float(i - mintime) * 1.0e-9 for i in data["dimensions"]]
         if data_name[0:4] == "AUG-":
-            d = conv_aug2_to_dataobj(data, data_setup.url, data_name, exp_id, options)
+            d = conv_aug2_to_dataobj(data, data_setup.url, data_name, exp_id, _options)
         else:
             if data['dimensionCount'] == 1:
-                d = conv_scalar_to_dataobj(data, data_setup.url, data_name, exp_id, options)
+                d = conv_scalar_to_dataobj(data, data_setup.url, data_name, exp_id, _options)
             else:
-                d = conv_matrix_to_dataobj(data, data_setup.url, data_name, exp_id, options)
+                d = conv_matrix_to_dataobj(data, data_setup.url, data_name, exp_id, _options)
 
-    if options["Cache Data"] is True:
+    if _options["Cache Data"] is True:
         flap.save(d, filename)
     return d
 
