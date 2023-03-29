@@ -34,11 +34,14 @@ class ReadThomsonProfiles():
         time=self.d["te"].coordinates[0]
         coordinate_names=["rho","R","Phi","Z"]
         coordinates=[]
+        coordinates.append(time)
         for coordinate_name in coordinate_names:
             coordinates.append(flap.Coordinate(name=self.d[coordinate_name].data_unit.name,
                                 unit=self.d[coordinate_name].data_unit.unit,
                                 shape=self.d[coordinate_name].shape,
-                                values=self.d[coordinate_name].data))
+                                values=self.d[coordinate_name].data,
+                                mode=flap.coordinate.CoordinateMode(equidistant=False)))
+        
             
         self.Te=flap.DataObject(exp_id=self.shotID,
                         data_array=self.d["te"].data,
@@ -51,7 +54,7 @@ class ReadThomsonProfiles():
                         error=self.d["ne_std"].data,
                         data_unit=self.d["ne"].data_unit,
                         coordinates=coordinates)
-                        # self.dataarr["te"].coordinate("Time")[0][:,0]
+                        # self.dataarr["te"].coordinate("Time")[0][:,0]       
         
 if __name__=="__main__":
     shotID = "20230323.063"
