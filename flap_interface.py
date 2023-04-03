@@ -201,7 +201,10 @@ def conv_thomson_to_dataobj(data, url, data_name, exp_id, options):
     coords = [time_coord, time_sample, reff_coord, r_coord, phi_coord, z_coord]
 
     # Constructing the DataObject
-    data_unit = flap.Unit(name=data[0]['label'], unit='None')
+    if data_name.split("-")[2] =="ne":
+        data_unit = flap.Unit(name="Electron density", unit='1e19m-3')
+    else:
+        data_unit = flap.Unit(name="Electron temperature", unit='keV')
     data_title = data_name
     data_shape = list(np.shape(data[0]['values']))
     d = flap.DataObject(data_array=np.array(data[0]['values']), error=np.array(data[1]['values']), data_unit=data_unit, coordinates=coords,
