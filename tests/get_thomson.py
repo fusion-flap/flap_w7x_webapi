@@ -13,9 +13,6 @@ from matplotlib import pyplot as plt
 
 class ReadThomsonProfiles():
     def __init__(self, shotID):
-        flap.register_data_source('W7X_WEBAPI',
-                              get_data_func=webapi.get_data,
-                              add_coord_func=webapi.add_coordinate)
         self.shotID = shotID
         self.searchpath=r"Test/raw/Minerva2/Minerva.ThomsonScattering.Profiles/Preliminary_Fast_DATASTREAM/V1/"
         # self.datanamearr=["rho","ne","te","ne_std","te_std","R","Phi","Z","Volume Number"]
@@ -32,7 +29,7 @@ class ReadThomsonProfiles():
     
     def ReorganizeData(self):
         time=self.d["te"].coordinates[0]
-        coordinate_names=["rho","R","Phi","Z"]
+        coordinate_names=["Normalized effective radius","Device R","Phi","Device z"]
         coordinates=[]
         coordinates.append(time)
         for coordinate_name in coordinate_names:
@@ -57,8 +54,21 @@ class ReadThomsonProfiles():
                         # self.dataarr["te"].coordinate("Time")[0][:,0]       
         
 if __name__=="__main__":
+    flap.register_data_source('W7X_WEBAPI',
+                          get_data_func=webapi.get_data,
+                          add_coord_func=webapi.add_coordinate)
+
     shotID = "20230323.063"
-    D=ReadThomsonProfiles(shotID)
+    shotID = "20230330.059"
+    # shotID = "20230330.060"
+    # D=ReadThomsonProfiles(shotID)
+    d = flap.get_data('W7X_WEBAPI', name="TS-v1-ne",
+                      exp_id=shotID,
+                      options={'Scale Time': True,
+                               'Check Time Equidistant': True,
+                               'Cache Data': False},
+                      object_name='Thomson')
+    print(int(np.mean(d.slice_data(slicing={"Time":4}).data)*100))
 
 def test():
     flap.register_data_source('W7X_WEBAPI',
