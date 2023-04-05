@@ -201,7 +201,7 @@ def conv_thomson_to_dataobj(data, url, data_name, exp_id, options):
     coords = [time_coord, time_sample, reff_coord, r_coord, phi_coord, z_coord]
 
     # Constructing the DataObject
-    if data_name.split("-")[2] =="ne":
+    if data_name.split("-")[-1] =="ne":
         data_unit = flap.Unit(name="Electron density", unit='1e19m-3')
     else:
         data_unit = flap.Unit(name="Electron temperature", unit='keV')
@@ -552,7 +552,7 @@ class Points3D:
 
     def __init__(self):
         self.xyz = np.empty([0, 3])  # point coordinates in stellarator xyz
-        self.rtz = np.empty([0, 3])  # point coordinates in stellarator radius-theta-z coordinates
+        self.rphiz = np.empty([0, 3])  # point coordinates in stellarator radius-phi-z coordinates
         self.reff = np.empty([0])  # a vector storing the effective radius of every point
         self.shotID = None
         self.ref_eq = None  # the w7x vmec equilibrium reference ID of the shot
@@ -566,36 +566,36 @@ class Points3D:
         if xyz_list.ndim == 1:
             xyz_list = np.asarray([xyz_list])
         self.xyz = np.append(self.xyz, xyz_list, axis=0)
-        self.rtz = self.xyz_to_rtz(self.xyz)
+        self.rphiz = self.xyz_to_rphiz(self.xyz)
 
-    def append_rtz(self, rtz_list):
+    def append_rphiz(self, rphiz_list):
         '''
-        Add points to the object based on their rtz coordinates. rtz_list has to be
+        Add points to the object based on their rphiz coordinates. rphiz_list has to be
         either a numpy array of length 3 defining the point location, or a two-dimensional
         numpy array.
         '''
-        if rtz_list.ndim == 1:
-            rtz_list = np.asarray([rtz_list])
-        self.rtz = np.append(self.rtz, rtz_list, axis=0)
-        self.xyz = self.rtz_to_xyz(self.rtz)
+        if rphiz_list.ndim == 1:
+            rphiz_list = np.asarray([rphiz_list])
+        self.rphiz = np.append(self.rphiz, rphiz_list, axis=0)
+        self.xyz = self.rphiz_to_xyz(self.rphiz)
 
     @staticmethod
-    def rtz_to_xyz(rtz_list):
+    def rphiz_to_xyz(rphiz_list):
         '''
-        Convert rtz coordinates to xyz and returns the value. rtz_list has to be
+        Convert rphiz coordinates to xyz and returns the value. rphiz_list has to be
         either a numpy array of length 3 defining the point location, or a two-dimensional
         numpy array. Practically list of points.
         '''
-        if rtz_list.ndim == 1:
-            rtz_list = np.asarray([rtz_list])
-        x_list = rtz_list[:, 0]*np.cos(rtz_list[:, 1])
-        y_list = rtz_list[:, 0]*np.sin(rtz_list[:, 1])
-        return np.squeeze(np.transpose([x_list, y_list, rtz_list[:, 2]]))
+        if rphiz_list.ndim == 1:
+            rphiz_list = np.asarray([rphiz_list])
+        x_list = rphiz_list[:, 0]*np.cos(rphiz_list[:, 1])
+        y_list = rphiz_list[:, 0]*np.sin(rphiz_list[:, 1])
+        return np.squeeze(np.transpose([x_list, y_list, rphiz_list[:, 2]]))
 
     @staticmethod
-    def xyz_to_rtz(xyz_list):
+    def xyz_to_rphiz(xyz_list):
         '''
-        Convert xyz coordinates to rtz and returns the value. xyz_list has to be
+        Convert xyz coordinates to rphiz and returns the value. xyz_list has to be
         either a numpy array of length 3 defining the point location, or a two-dimensional
         numpy array. Practically list of points.
         '''
@@ -605,25 +605,54 @@ class Points3D:
         t_list = np.arctan2(xyz_list[:, 1], xyz_list[:, 0])
         return [np.squeeze(np.transpose([r_list, t_list, xyz_list[:, 2]]))]
 
-    def xyz_to_reff(self, shotID=None):
+    def xyz_to_reff(self, shotID=None, normalize=True):
         '''
         Obtain the effective radius based on self.xyz of the object and vmec results
         '''
         if shotID:
             self.shotID = shotID
             self.ref_eq = get_refeq(shotID)
-            if self.ref_eq:
-                url = 'http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/'+self.ref_eq+'/reff.json?'
-            else:
-                info = 'Points3D ' + shotID + 'error: No data at ' + url + "\n" + \
-                        "The information at http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref may help"
-                logger.error(info)
-                print(info)
+        if hasattr(self, "ref_eq") is False:
+            self.ref_eq = get_refeq(shotID)
+        if self.ref_eq:
+            url = 'http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/'+self.ref_eq+'/reff.json?'
+        else:
+            info = 'Points3D ' + shotID + 'error: No data at ' + url + "\n" + \
+                    "The information at http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/w7x_ref may help"
+            logger.error(info)
+            print(info)
         self.reff = np.empty([0])
+        info = "Obtaining effective radius of points"
+        logger.info(info)
+        pointnum = 0
         for point in self.xyz:
+            info = f"{int(pointnum/len(self.xyz)*1000)*0.1}%"
+            logger.info(info)
             url_str = url + 'x='+str(point[0])+'&y='+str(point[1])+'&z='+str(point[2])
             data = archive_signal.ArchiveSignal.url_request(url_str)
             self.reff = np.append(self.reff, data['reff'][0])
+            pointnum += 1
+        if normalize is True:
+            self.normalize_reff()
+    
+    def reff_at_lcfs(self, shotID=None):
+        if shotID is not None:
+            self.shotID = shotID
+        r,z = get_lcfs(self.shotID, 72)
+        r = r[0]
+        z = z[0]
+        if hasattr(self, "ref_eq") is False:
+            self.ref_eq = get_refeq(self.shotID)
+        url = 'http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/'+self.ref_eq+'/reff.json?'
+        x = r*np.cos(72/180*np.pi)
+        y = r*np.sin(72/180*np.pi)
+        url_str = url + 'x='+str(x)+'&y='+str(y)+'&z='+str(z)
+        data = archive_signal.ArchiveSignal.url_request(url_str)
+        reff = data['reff'][0]
+        return reff
+
+    def normalize_reff(self):
+        self.reff = self.reff.astype("float")/self.reff_at_lcfs()
 
 
 def get_lcfs(shotID, phi):
@@ -645,6 +674,8 @@ def get_lcfs(shotID, phi):
     r = data['lcfs'][0]['x1']
     z = data['lcfs'][0]['x3']
     return r, z
+
+
 
 
 def get_refeq(shotID):

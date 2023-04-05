@@ -202,7 +202,7 @@ class Points3DTest(unittest.TestCase):
 #---------------------------------------TESTING SPECIFIC SIGNALS--------------------------------------
 
 def test_thomson():
-    shotID = "20230330.059"
+    shotID = "20230323.059"
     d = flap.get_data('W7X_WEBAPI', name="TS-v1-ne", # if v1 is the latest data version, this is equal to setting "TS-ne" as name
                       exp_id=shotID,
                       options={'Scale Time': True,
