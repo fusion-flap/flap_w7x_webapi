@@ -387,6 +387,22 @@ def stream_gen_OP2(signal_id):
     
     if signal_id in stream_dict:
         return stream_dict[signal_id]
+    elif signal_id[0:4] == 'Zeff':
+        # signal format expected Zeff-v20-data
+        split_out = signal_id.split('-')
+        version = split_out[1]
+        version = version[1:]
+        stream_type = split_out[2]
+        if stream_type == 'data':
+            location_string = \
+                'Test/raw/Minerva2/Minerva.Zeff.AEZ40-AET40.USB-Spectrometer/Zeff_mean_DATASTREAM/V'+version+"/0/Zeff_mean/"
+        elif stream_type == 'param':
+            location_string = \
+                'Test/raw/Minerva2/Minerva.Zeff.AEZ40-AET40.USB-Spectrometer/Zeff_mean_PARLOG/V'+version+"/0/Zeff_mean/"
+        elif stream_type == 'err':
+            location_string = \
+                'Test/raw/Minerva2/Minerva.Zeff.AEZ40-AET40.USB-Spectrometer/Zeff_std_DATASTREAM/V'+version+"/0/Zeff_std/"      
+        return location_string
     elif signal_id[0:2] == 'TS':
         # Thomson scattering, expected string format e.g. TS-v20-ne
         # That would correspond to the version 20, data for the
