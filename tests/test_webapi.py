@@ -191,12 +191,12 @@ def test_reff():
     point = webapi.Points3D()
     point.append_xyz(np.array([0,6.0,0]))
     point.xyz_to_reff('20181018.003')
-    return point.reff
+    return point.reff[0]
 
 
 class Points3DTest(unittest.TestCase):
     def test_vectordata(self):
-        self.assertEqual(test_reff(),  0.45680578471016137)
+        self.assertEqual(test_reff(),  0.8854482350249514)
 
 
 #---------------------------------------TESTING SPECIFIC SIGNALS--------------------------------------
@@ -210,10 +210,21 @@ def test_thomson():
                                'Cache Data': False},
                       object_name='Thomson')
     return int(np.mean(d.slice_data(slicing={"Time":4}).data)*100)
+
+def test_ece():
+    d = flap.get_data('W7X_WEBAPI', name='ECE-te',
+                      exp_id='20230216.028',
+                      options={'Scale Time': True,
+                               'Cache Data': False},
+                      object_name='ECE temperature data')
+    return int(np.mean(d.slice_data(slicing={"Time":4}).data)*100)
+
     
 class SignalTest(unittest.TestCase):
     def test_thomson(self):
         self.assertEqual(test_thomson(),  30)
+    def test_ece(self):
+        self.assertEqual(test_ece(),  96)
 
 
 if __name__ == '__main__':

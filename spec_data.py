@@ -192,6 +192,17 @@ class ThomsonData(SignalList):
             signal_names = [signal_id, uncertainty]+additional_signals
             self.list  = [archive_signal.ArchiveSignal(signal, exp_id=exp_id) for signal in signal_names]
 
+class ECEData(SignalList):
+        """"
+        
+        """
+        
+        def __init__(self, signal_id, exp_id="20221201.001"):
+            te = [f"te-ch{i:02d}" for i in np.arange(32)+1]
+            get_data = ["rho"]+te
+            signal_names = ["-".join(["ECE"]+[data]) for data in get_data]
+            self.list  = [archive_signal.ArchiveSignal(signal, exp_id=exp_id) for signal in signal_names]
+
 class ABESData(VectorData):
         """"
         Obtains the ABESData from the archive.

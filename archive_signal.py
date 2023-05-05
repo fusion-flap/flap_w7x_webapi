@@ -422,5 +422,18 @@ def stream_gen_OP2(signal_id):
         location_string = f"Test/raw/Minerva2/Minerva.ThomsonScattering.Profiles/Preliminary_Fast_DATASTREAM/V{version}" + \
                 '/' + thomson_dict[quantity]
         return location_string
+    elif signal_id[0:3] == 'ECE':
+        # ECE scattering, expected string format e.g. ECE-te-ch01 or ECE-rho
+        # That would correspond to the version 1, data for the
+        # electron temperature profile
+        split_out = signal_id.split('-')
+        quantity = split_out[1]
+        if quantity == "te":
+            location_string = "ArchiveDB/raw/Minerva/Minerva.ECE.DownsampledRadiationTemperatureTimetraces/"\
+                +f"relative_calibrated_signal_DATASTREAM/V1/{int(split_out[2][2:])-1}/QME-{split_out[2]}/"
+        elif quantity == "rho":
+            location_string = "ArchiveDB/raw/Minerva/Minerva.ECE.ColdResonance/"\
+                +"cold_resonance_DATASTREAM/V1/0/rho/"
+        return location_string
     else:
         return signal_id

@@ -211,6 +211,63 @@ def conv_thomson_to_dataobj(data, url, data_name, exp_id, options):
                         exp_id=exp_id, data_title=data_title, info=info, data_shape=data_shape)
     return d
 
+def conv_ece_to_dataobj(data, url, data_name, exp_id, options):
+    """Converts the ScalarData obtained by the code to DataObject class of flap
+    """
+
+    info = "Data downloaded from: "+url+os.linesep
+
+    # Constructing the time flap Coordinate
+    name = 'Time'
+    # getting the unit
+    unit = 'ns'
+    if 'Scale Time' in options.keys():
+        if options['Scale Time'] is True:
+            unit = 'Second'
+    # Checking equidistance of time
+    equidistant = False
+    if 'Check Time Equidistant' in options.keys():
+        if options['Check Time Equidistant'] is True:
+            timesteps = np.array(data[1]["dimensions"][1:])-np.array(data[1]["dimensions"][0:-1])
+            equidistance = np.linalg.norm(timesteps-timesteps[0])/np.linalg.norm(timesteps)
+            if equidistance < 1e-6:
+                info = info+"Time variable is taken as equidistant to an accuracy of "+str(equidistance)+os.linesep
+                equidistant = True
+                start = data[1]["dimensions"][0]
+                step = np.mean(timesteps)
+            else:
+                    info = info+"Time variable is not equidistant, deviation: "+str(equidistance)+os.linesep
+    shape = [len(data[1]['dimensions'])]
+
+    if equidistant is True:
+        time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=True), shape=shape,
+                                     start=start, step=[step], dimension_list=[0])
+    else:
+        time_coord = flap.Coordinate(name=name, unit=unit, mode=flap.CoordinateMode(equidistant=False), shape=shape,
+                                     values=np.asarray(data[1]["dimensions"]), dimension_list=[0])
+
+    # Temporal sample coord
+    time_sample = flap.Coordinate(name='Sample', unit='1', mode=flap.CoordinateMode(equidistant=True), shape=shape,
+                                  start=1, step=[1], dimension_list=[0])
+    order = np.argsort(data[0]["values"][0]) # order the data according to the location
+    reff_coord = flap.Coordinate(name='Normalized effective radius', unit='1', mode=flap.CoordinateMode(equidistant=False), shape=[len(data[0]["values"][0])],
+                                  values=np.asarray(data[0]["values"][0])[order], dimension_list=[1])
+    
+    temp_data = np.zeros([len(data[1]['dimensions']), len(data[0]["values"][0])])
+    for channel in np.arange(len(data[0]["values"][0])):
+        index = np.where(order==channel)[0][0]
+        temp_data[:,index] = data[channel+1]["values"]
+
+    coords = [time_coord, time_sample, reff_coord]
+
+    # Constructing the DataObject
+    data_unit = flap.Unit(name="Electron temperature", unit='keV')
+    data_title = data_name
+    data_shape = temp_data.shape
+    d = flap.DataObject(data_array=temp_data, data_unit=data_unit, coordinates=coords,
+                        exp_id=exp_id, data_title=data_title, info=info, data_shape=data_shape)
+    return d
+
 def conv_aug2_to_dataobj(data, url, data_name, exp_id, options):
     """Converts the ScalarData obtained by the code to DataObject class of flap
     """
@@ -408,6 +465,8 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
                 data_setup = spec_data.ThomsonData("-".join([f"TS-v{version}", data_name.split("-")[1]]), exp_id=exp_id)
             else:
                 data_setup = spec_data.ThomsonData(data_name, exp_id=exp_id)
+    if data_name == "ECE-te":
+        data_setup = spec_data.ECEData(data_name, exp_id=exp_id)
     elif data_name[0:5] == "ABES-":
         data_setup = archive_signal.ArchiveSignal(data_name+"-data-vol15", exp_id=exp_id)
         get_vector = True
@@ -506,13 +565,19 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
                 for d in data:
                     mintime = min(d["dimensions"])+1000000000-start_shift
                     d["dimensions"][:] = [float(i - mintime) * 1.0e-9 for i in d["dimensions"]]
+            elif data_name == "ECE-te":
+                for d in data:
+                    mintime = min(d["dimensions"])+1000000000-start_shift
+                    d["dimensions"][:] = [float(i - mintime) * 1.0e-9 for i in d["dimensions"]]
             else:
                 mintime = min(data["dimensions"])+1000000000-start_shift
                 data["dimensions"][:] = [float(i - mintime) * 1.0e-9 for i in data["dimensions"]]
         if data_name[0:4] == "AUG-":
             d = conv_aug2_to_dataobj(data, data_setup.url, data_name, exp_id, _options)
-        if data_name[0:3] == "TS-":
+        elif data_name[0:3] == "TS-":
             d = conv_thomson_to_dataobj(data, data_setup.list[0].url, data_name, exp_id, _options)
+        elif data_name == "ECE-te":
+            d = conv_ece_to_dataobj(data, data_setup.list[0].url, data_name, exp_id, _options)
         else:
             if data['dimensionCount'] == 1:
                 d = conv_scalar_to_dataobj(data, data_setup.url, data_name, exp_id, _options)
