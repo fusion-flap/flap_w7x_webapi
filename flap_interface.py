@@ -711,6 +711,10 @@ class Points3D:
         url = 'http://svvmec1.ipp-hgw.mpg.de:8080/vmecrest/v1/'+self.ref_eq+'/reff.json?'
         x = r*np.cos(72/180*np.pi)
         y = r*np.sin(72/180*np.pi)
+        x=int(x*1000)*0.001
+        y=int(y*1000)*0.001
+        z=int(z*1000)*0.001
+
         url_str = url + 'x='+str(x)+'&y='+str(y)+'&z='+str(z)
         data = archive_signal.ArchiveSignal.url_request(url_str)
         reff = data['reff'][0]

@@ -8,6 +8,9 @@ Created on Thu Mar 30 14:30:16 2023
 import os
 import sys  # For error messages
 import warnings
+import decimal
+import json
+import urllib
 import numpy as np
 from . import archive_signal
 
@@ -263,7 +266,7 @@ class WriteABESSignal(archive_signal.ArchiveSignal):
 #        self.light_recon = datalist[2]
         self.shotid = shotid
         self.minindex = minindex
-        self.version = version
+        self.version = int(version)
         self.json={}
 #        self.set_params(data,shotid)
 #        self.set_data(data)
@@ -401,15 +404,17 @@ class WriteABESSignal(archive_signal.ArchiveSignal):
             for key in self.json["data"].keys():
                 print('uploading '+key)
                 try:
-                    url_parms = url + key+"_PARLOG/V"+str(self.version)
-                    req = urllib.request.Request(url_parms)
+                    #parameters
+                    url_loc = url + key+"_PARLOG/V"+str(self.version)
+                    req = urllib.request.Request(url_loc)
                     req.add_header('Content-Type', 'application/json; charset=utf-8')
                     urllib.request.urlopen(req, self.json["params"])
-                    url_data = url + key+"_DATASTREAM/V"+str(self.version)
-                    req = urllib.request.Request(url_data)
+                    #data
+                    url_loc = url + key+"_DATASTREAM/V"+str(self.version)
+                    req = urllib.request.Request(url_loc)
                     req.add_header('Content-Type', 'application/json; charset=utf-8')
                     urllib.request.urlopen(req, self.json["data"][key])
                 except urllib.error.HTTPError as e:
                     print(e)
+                    print(url_loc)
                     print(e.headers)
-            

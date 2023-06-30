@@ -26,10 +26,13 @@ class ArchiveSignal(object):
 
     """
 
-    def __init__(self, signal_id, exp_id="20221201.001"):
+    def __init__(self, signal_id=None, exp_id="20221201.001"):
         """ Initializes the basic signal information
         """
-        self.stream = stream_gen(signal_id, exp_id=exp_id)  # The address of the datastream
+        if signal_id is not None:
+            self.stream = stream_gen(signal_id, exp_id=exp_id)  # The address of the datastream
+        else:
+            self.stream=None
         self.time_query = ""  # The time for which to look for the data
         ''' Resampling. For high time resolution data, the data
         for one shot can be otherwise unreasonably large to handle:'''
