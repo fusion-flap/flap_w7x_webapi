@@ -466,12 +466,12 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
             else:
                 data_setup = spec_data.ThomsonData(data_name, exp_id=exp_id)
     if data_name == "ECE-te":
-        data_setup = spec_data.ECEData(data_name, exp_id=exp_id)
+        data_setup = spec_data.ECEData(data_name)
     elif data_name[0:5] == "ABES-":
-        data_setup = archive_signal.ArchiveSignal(data_name+"-data-vol15", exp_id=exp_id)
+        data_setup = archive_signal.ArchiveSignal(data_name+"-data-vol15")
         get_vector = True
     else:
-        data_setup = archive_signal.ArchiveSignal(data_name, exp_id=exp_id)
+        data_setup = archive_signal.ArchiveSignal(data_name)
     # Generating the data relevant time intervals
     if exp_id is None:
         if not ((_options['Time Start'] is not None) and (_options['Time Stop'] is not None)):
