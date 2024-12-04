@@ -468,10 +468,10 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
     if data_name == "ECE-te":
         data_setup = spec_data.ECEData(data_name)
     elif data_name[0:5] == "ABES-":
-        data_setup = archive_signal.ArchiveSignal(data_name+"-data-vol15")
+        data_setup = archive_signal.ArchiveSignal(data_name+"-data-vol15", exp_id=exp_id)
         get_vector = True
     else:
-        data_setup = archive_signal.ArchiveSignal(data_name)
+        data_setup = archive_signal.ArchiveSignal(data_name, exp_id=exp_id)
     # Generating the data relevant time intervals
     if exp_id is None:
         if not ((_options['Time Start'] is not None) and (_options['Time Stop'] is not None)):
@@ -584,7 +584,8 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
             else:
                 d = conv_matrix_to_dataobj(data, data_setup.url, data_name, exp_id, _options)
 
-    d.info = note
+    d.info = f"Source: {data_setup.stream}\n"
+    d.info += note
 
     if _options["Cache Data"] is True:
         d = standard_dataobject(d)

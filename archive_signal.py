@@ -203,8 +203,10 @@ def stream_gen(signal_id, exp_id="20221201.001"):
     #for campaign OP1, the location of a number of signals was different
     if int(exp_id[:8]) < 20221201:
         return stream_gen_OP1(signal_id)
-    else:
+    elif int(exp_id[:8]) < 20231201:
         return stream_gen_OP2(signal_id)
+    else:
+        return stream_gen_curr(signal_id)
 
 def stream_gen_OP1(signal_id):
     stream_dict = dict()
@@ -387,6 +389,80 @@ def stream_gen_OP2(signal_id):
     # QSI-CXRS data
     stream_dict["QSI-CXRS"] = \
         "Test/raw/W7X/QSI/cxrs_DATASTREAM/0/Images/"
+    
+    if signal_id in stream_dict:
+        return stream_dict[signal_id]
+    elif signal_id[0:4] == 'Zeff':
+        # signal format expected Zeff-v20-data
+        split_out = signal_id.split('-')
+        version = split_out[1]
+        version = version[1:]
+        stream_type = split_out[2]
+        if stream_type == 'data':
+            location_string = \
+                'Test/raw/Minerva2/Minerva.Zeff.AEZ40-AET40.USB-Spectrometer/Zeff_mean_DATASTREAM/V'+version+"/0/Zeff_mean/"
+        elif stream_type == 'param':
+            location_string = \
+                'Test/raw/Minerva2/Minerva.Zeff.AEZ40-AET40.USB-Spectrometer/Zeff_mean_PARLOG/V'+version+"/0/Zeff_mean/"
+        elif stream_type == 'err':
+            location_string = \
+                'Test/raw/Minerva2/Minerva.Zeff.AEZ40-AET40.USB-Spectrometer/Zeff_std_DATASTREAM/V'+version+"/0/Zeff_std/"      
+        return location_string
+    elif signal_id[0:2] == 'TS':
+        # Thomson scattering, expected string format e.g. TS-v20-ne
+        # That would correspond to the version 20, data for the
+        # electron density profile
+        split_out = signal_id.split('-')
+        version = split_out[1][1:]
+        quantity = split_out[2]
+        thomson_dict={
+            "rho": "0/rho/",
+            "ne": "1/ne/",
+            "te": "2/te/",
+            "ne_std": "3/ne_std/",
+            "te_std": "4/te_std/",
+            "R": "5/R/",
+            "Phi": "6/Phi/",
+            "Z": "7/Z/"}
+        location_string = f"Test/raw/Minerva2/Minerva.ThomsonScattering.Profiles/Preliminary_Fast_DATASTREAM/V{version}" + \
+                '/' + thomson_dict[quantity]
+        return location_string
+    elif signal_id[0:3] == 'ECE':
+        # ECE scattering, expected string format e.g. ECE-te-ch01 or ECE-rho
+        # That would correspond to the version 1, data for the
+        # electron temperature profile
+        split_out = signal_id.split('-')
+        quantity = split_out[1]
+        if quantity == "te":
+            location_string = "ArchiveDB/raw/Minerva/Minerva.ECE.DownsampledRadiationTemperatureTimetraces/"\
+                +f"relative_calibrated_signal_DATASTREAM/V1/{int(split_out[2][2:])-1}/QME-{split_out[2]}/"
+        elif quantity == "rho":
+            location_string = "ArchiveDB/raw/Minerva/Minerva.ECE.ColdResonance/"\
+                +"cold_resonance_DATASTREAM/V1/0/rho/"
+        return location_string
+    else:
+        return signal_id
+
+def stream_gen_curr(signal_id):
+    """ Creates the string for obtaining a number of specific signals of OP2
+
+    :signal_id: signal id string
+    :return: reduction string part of the url, if there is no signal_id
+    string in stream_dict, then just return signal_id
+    """
+    stream_dict = dict()
+    # Total ECRH power:
+    stream_dict['ECRH'] = \
+        'Test/codac/W7X/CBG_ECRH/TotalPower_DATASTREAM/V1/0/Ptot_ECRH/scaled/'
+    # NBI source 7 beam current:
+    stream_dict['NBI-7'] = \
+        'ArchiveDB/codac/W7X/CoDaStationDesc.31/DataModuleDesc.24119_DATASTREAM/5/HGV_3%20Monitor%20I/scaled/'
+    # NBI source 8 beam current:
+    stream_dict['NBI-8'] = \
+        'ArchiveDB/codac/W7X/CoDaStationDesc.31/DataModuleDesc.24119_DATASTREAM/7/HGV_4%20Monitor%20I/scaled/'
+    # QSI-CXRS data
+    stream_dict["QSI-CXRS"] = \
+        "Test/raw/W7X/QSS_DivertorSpectroscopy/PI_CCD_06_1-QSS60OC095_DATASTREAM/0/Images/"
     
     if signal_id in stream_dict:
         return stream_dict[signal_id]
