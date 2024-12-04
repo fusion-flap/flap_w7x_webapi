@@ -229,3 +229,9 @@ class SignalTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+    
+    
+    location = f'Test/raw/W7XAnalysis/NBI/S7_PNEUT_DATASTREAM/V1/0/Neutralized Power Source (S7)/'
+    location = f'Test/raw/W7XAnalysis/NBI/S8_PNEUT_DATASTREAM/V1/0/'
+    location = f'Test/raw/W7XAnalysis/NBI/S7_PNEUT_DATASTREAM/V1/0/'
+

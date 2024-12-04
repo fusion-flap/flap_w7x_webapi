@@ -112,11 +112,17 @@ class ArchiveSignal(object):
         :return: the time_query part of the url
 
         """
-        start_ns = self.convert_nanosecs(start.year, start.month, start.day,
+        try:
+            start_ns = self.convert_nanosecs(start.year, start.month, start.day,
                                          start.hour, start.minute, start.second, start.microsecond)
+        except AttributeError:
+            start_ns = start
         self.from_time = start_ns
-        stop_ns = self.convert_nanosecs(stop.year, stop.month, stop.day, stop.hour,
-                                        stop.minute, stop.second, stop.microsecond)
+        try:
+            stop_ns = self.convert_nanosecs(stop.year, stop.month, stop.day, stop.hour,
+                                            stop.minute, stop.second, stop.microsecond)
+        except AttributeError:
+            stop_ns = stop
         self.time_query = "_signal.json?from=" + str(start_ns) + '&upto=' + str(stop_ns)
         return self.time_query
     
