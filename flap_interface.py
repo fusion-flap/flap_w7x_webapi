@@ -9,6 +9,8 @@
 
 """
 import os
+import io
+import pickle
 import sys  # For error messages
 import warnings
 import datetime  # For handling the timing
@@ -19,6 +21,7 @@ import logging
 import numpy as np
 import decimal
 import copy
+import configparser
 
 import flap
 
@@ -29,6 +32,116 @@ if (flap.VERBOSE):
     print("Importing w7x_webapi")
 
 logger = logging.getLogger('flapLogger')
+
+def webapi_virtual_names(data_name, exp_id, channel_config_file):
+
+    """
+    Translates virtual data names to webapi entries.
+    Returns a list of virtual names and translated full names.
+    The list is read from the configuration file. The file is a standard
+    configuration file with one section [Virtual names]. Each entry looks
+    like one of the following templates.
+        Simple translation:
+            <name> = <webapi name>
+        Translation in an expID range, including ends:
+            <name>(startID-endID) = <webapi name>
+          One of startID or endID may be omitted.
+        <webapi name> can be either a single name or complex(name1, name2) which
+        will construct a complex signal from the two entries. 
+        It can also be a list of signals (aa,bb,...)
+    Wildcards are allowed in data names. Data names can be a single string or
+        list of strings.
+    Return value:
+        virt_names, webapi_str, webapi_names
+        virt names is a list of the interpreted names.
+        virt_str is the description from the virtual name translation file
+        webapi_names is a list of the same length as virt_names. Elements can be the following:
+        Elements can be the following:
+            string: a single webapi name
+            list: [<type>, <name1>, <name2>, ...]
+                type can be
+                  'complex': two webapi entries are expected (real, imag), complex
+                  signal will be created from them.
+
+    """
+    if ((type(exp_id) is not str) or (len(exp_id) != 12)):
+        raise TypeError("exp_id should be string in format YYYYMMDD.xxx")
+    exp_id_num = exp_id
+        
+    config = configparser.ConfigParser()
+    config.optionxform = str
+    read_ok = config.read(channel_config_file)
+    if (read_ok == []):
+        raise ValueError("Invalid webapi virtual name file "+channel_config_file) 
+    try:
+        entries = config.items('Virtual names')
+    except Exception as e:
+        raise ValueError("Invalid webapi virtual name file "+channel_config_file)
+    entry_descr = [e[0] for e in entries]
+    entry_values = [e[1] for e in entries]
+    webapi_names = []
+    entry_names = []
+    # Finding etries with matching exp_id
+    for e,ev in zip(entry_descr, entry_values):
+        start_brace = e.find('(')
+        stop_brace = e.find(')')
+        if (start_brace * stop_brace < 0):
+            raise ValueError("Invalid entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
+        if (start_brace > 0):
+            # ExpID range given
+            exp_id_range = e[start_brace+1:stop_brace].split('-')
+            if (len(exp_id_range) != 2):
+                raise ValueError("Invalid exp_id range in entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
+            if (exp_id_range[0].strip() == ''):
+                exp_id_start = None
+            else:
+                try:
+                    exp_id_start = int(exp_id_range[0])
+                except ValueError:
+                    raise ValueError("Invalid exp_id start in entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
+            if (exp_id_range[1].strip() == ''):
+                exp_id_stop = None
+            else:
+                try:
+                    exp_id_stop = int(exp_id_range[1])
+                except ValueError:
+                    raise ValueError("Invalid exp_id stop in entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
+            if ((exp_id_start is not None) and (exp_id_num < exp_id_start) or \
+                (exp_id_stop is not None) and (exp_id_num > exp_id_stop)) :
+                continue
+            entry_names.append(e[:start_brace])
+        else:
+            entry_names.append(e)
+        webapi_names.append(ev)
+        
+    if (type(data_name ) is not list):
+        _data_name = [data_name]
+    else:
+        _data_name = data_name
+    select_list = []
+    select_webapi_list = []
+    for i,dn in enumerate(_data_name):    
+        try:
+            sl, si = flap.select_signals(entry_names, dn)
+            select_list += sl
+            select_webapi_list += [webapi_names[i] for i in si]
+        except ValueError as e:
+            select_list.append(None)
+            select_webapi_list.append(dn)
+            
+    webapi_descr = []
+    for descr in select_webapi_list:
+        start_brace = descr.find('(')
+        stop_brace = descr.find(')')
+        if (start_brace * stop_brace < 0):
+            raise ValueError("Invalid value '{:s}' in virtual name file: {:s}".format(descr, channel_config_file))
+        if (start_brace >= 0):
+            webapi_list = descr[start_brace+1:stop_brace].split(',')
+            webapi_type = descr[:start_brace]
+            webapi_descr.append([webapi_type] + webapi_list)
+        else:
+            webapi_descr.append(descr)    
+    return select_list, select_webapi_list, webapi_descr        
 
 def standard_dataobject(dataobject):
     '''Converts the input dataobject to a standard flap dataobject so that it can be saved and used by other users of
@@ -381,9 +494,205 @@ def conv_vector_to_dataobj(data, url, data_name, exp_id, options):
                         info=info, data_shape=data_shape)
     return d
 
+def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordinates=None, data_source=None):
+    """ Data read function for the W7-X Alkali BES diagnostic
+    data_name: should be a string, currently either:
+        A full webapi name 
+            e.g. ArchiveDB/codac/W7X/CBG_ECRH/TotalPower_DATASTREAM/V1/0/Ptot_ECRH/scaled/
+        A webapi name with some unix-style regular expression. 
+            e.g. ArchiveDB/raw/Minerva/Minerva.ECE.RadiationTemperatureTimetraces/relative_calibrated_signal_DATASTREAM/V1/0/QME-ch[01-12]//
+            This example will read 12 channels from the ECE diagnostic into one data object.
+        A list of strings
+            The listed signals will be read into one data object, if the time scales are the same.
+        A name or list of names which are listed in <Virtual name file>
+        
+        Regular expression processing will be applied both at the data_name level and after translation using the
+        <Virtual name file>
+    exp_id: Experiment ID, YYYYMMDD.xxx, e.g. '20180912.012'
+        if not given, then a start and a stop time should be given in the options
+    coordinates: List of flap.Coordinate() or a single flap.Coordinate
+        Defines read ranges. The following coordinates are interpreted:
+            'Time [s]': The read times
+                        Only a single equidistant range is interpreted.
+    options:
+        Time Start and Time Stop : datetime.datetime
+            Times can be given as an alternative to exp_id e.g.
+            options={'Time Start':datetime.datetime(2018, 8, 22, 10, 46, 53),
+                     'Time Stop': datetime.datetime(2018, 8, 22, 10, 47, 8)}
+        Virtual name file : str 
+            A file name to translate virtual names to webapi entries. 
+            For format see webapi_virtual_names()
+
+        Downsample : float, default is None
+            The sampling of the data to this frequency.
+        Scale Time : bool, default is False
+            if set and True, then the data is normalized to seconds and 0s point is set to
+            the start of the shot
+        Check Time Equidistant : bool , default is False
+            If set and True, then the data is checked if it is equidistant in time.
+            it is assumed to be equidistant, if the difference between the timesteps relatively small
+        Cache Data : bool, default is None
+            Store a local copy of the data so as next time it is read from there.
+        Cache Directory : str
+            Cache directory name. If None will store data under the source file directory.
+        V1 : bool, default is False
+            If True the new version of the program will be used: get_data_v1
+        Verbose : bool
+            Print diagnostic messages.
+    """
+
+    options_default = {'Cache Data': True,
+                       'Cache Directory': None,
+                       'Scale Time':False,
+                       'Time Start': None,
+                       'Time Stop': None,
+                       'Downsample': None,
+                       'Check Time Equidistant': False,
+                       'V1' : False,
+                       'Virtual name file' : 'Virtual_names_webapi.cfg',
+                       'Verbose' : False
+                       }
+  
+    _options = flap.config.merge_options(options_default,options,data_source='W7X_WEBAPI')
+ 
+    if ((type(exp_id) is not str) or (len(exp_id) != 12)):
+        raise TypeError("exp_id should be string in format YYYYMMDD.xxx")
+    
+    if (_options['Virtual name file'] is not None):
+        try:
+            virt_names, virt_webapi_txt, virt_webapi = webapi_virtual_names(data_name, exp_id, _options['Virtual name file'])
+        except Exception as e:
+            raise e
+    
+    # Assembling a list of signals and list of webapi request
+    signal_list = []
+    common_time = None    
+    for name, webapi_descr in zip(virt_names,virt_webapi):
+        # Assembling a list of webapi nodes needed for this data
+        webapi_request_list = []
+        if (name is None):
+            # This was not recognized as virtual name
+            webapi_request_list = [webapi_descr]
+            signal_list.append(webapi_descr)
+            readtype = 0
+        else:
+            # This was recongnized as a virtual signal
+            signal_list.append(name)
+            if (type(webapi_descr) is not list):
+                # This was recognized as a single webapii node
+                webapi_request_list = [webapi_descr]
+                readtype = 0
+            else:
+                # This is a composite virtual signal
+                webapi_request_list = webapi_descr[1:]
+                readtype = 1 
+        
+        # Processing reqgular expressions
+        webapi_request_list = flap.select_signals(None,webapi_request_list)[0]
+        
+        for webapi_name in webapi_request_list: 
+ 
+            # Trying to read cached data
+            if ((_options['Cache Data']) and (_options['Cache Directory'] != None)):
+                filename = str(exp_id)+'_'+webapi_name
+                for c in ['\\',':']:
+                   filename = filename.replace(c,'_')
+                #filename = os.path.join(_options['Cache directory'],filename+'.pickle')
+                directory=os.path.join(_options['Cache directory'],str(exp_id))
+                if not (os.path.exists(directory)):
+                    try:
+                        os.mkdir(directory)
+                    except:
+                        raise SystemError("The shot folder cannot be created. Cache directory might not be present.")
+                                      
+                filename = os.path.join(directory,filename+'.pickle')
+                try:
+                    f = io.open(filename,'rb')
+                    webapi_pickle = pickle.load(f)
+                    f.close()
+                    try:
+                        print("Get data from pickle file.")
+                        del webapi_pickle
+                        data_cached = True
+                    except:
+                        data_cached = False
+                except:
+                    data_cached = False
+            else:
+                data_cached = False
+                
+            if (not data_cached):
+                webapi_data = [1,2,3]
+                
+                # data_setup = archive_signal.ArchiveSignal(webapi_name, exp_id=exp_id)
+                # # Generating the data relevant time intervals
+                # if exp_id is None:
+                #     if not ((_options['Time Start'] is not None) and (_options['Time Stop'] is not None)):
+                #         raise ValueError("either exp_id should be given, or options should have a 'Time Start' and 'Time Stop' key.")
+                #     else:
+                #         data_setup.time_query_gen(_options['Time Start'], _options['Time Stop'])
+                # else:
+                #     data_setup.shotid_time_query_gen(exp_id)
+     
+                # start_shift = decimal.Decimal(0)
+                # if coordinates is not None:
+                #     coord = coordinates[0]
+                #     if (coord.unit.name == 'Time') and (coord.mode.equidistant):
+                #             read_range = [float(coord.c_range[0]), float(coord.c_range[1])]
+                #     else:
+                #         raise ValueError("Only timeranges may be defined for reading")
+                #     orig_times = data_setup.time_query.split('=')
+                #     orig_start = decimal.Decimal((orig_times[1].split('&'))[0])
+                #     if int(exp_id[:8]) <= 20221001:
+                #         start_shift = decimal.Decimal((read_range[0]+1.0)*1e9)
+                #     else:
+                #         start_shift = decimal.Decimal(read_range[0]*1e9)
+                #     new_start = orig_start + start_shift
+                #     if int(exp_id[:8]) <= 20221001:
+                #         new_stop = orig_start + decimal.Decimal((read_range[1]+1.0)*1e9)
+                #     else:
+                #         new_stop = orig_start + decimal.Decimal((read_range[1])*1e9)
+                #     data_setup.time_query = "_signal.json?from=" + str(new_start) + '&upto=' + str(new_stop)
+     
+                # # Downsampling the data if requested
+                # if _options['Downsample'] is not None:
+                #     warnings.warn('Downsampling requests do not seem to work properly on the W7-X webapi')
+                #     data_setup.downsamp_gen(_options['Downsample'])
+
+                if (_options['Verbose']):
+                    print("Reading {:s}".format(webapi_name),flush=True)
+
+                webapi_data = [1,2,3]
+
+                if (not data_cached and (_options['Cache Data']) and (_options['Cache Directory'] is not None)):
+                    webapi_data_pickle = [webapi_data]
+                    while True:
+                        try:          
+                            f = io.open(filename,"wb")
+                        except:
+                            print("Warning: Cannot open cache file: "+filename)
+                            break
+                        try:
+                            pickle.dump(webapi_data_pickle,f)
+                            del webapi_data_pickle
+                        except Exception as e:
+                            print("Warning: Cannot write cache file: "+filename)
+                            break
+                        try:
+                            f.close()
+                        except Exception as e:
+                            print("Warning: Cannot write cache file: "+filename)
+                        break
+
+        print("webapi_descr[0]:'{:s}'".format(webapi_descr[0]))
+
+
+    return flap.DataObject(data_array=np.array(webapi_data))
+
+    
 
 def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates=None, data_source=None):
-    """ Data read function for the W7-X Alkali BES diagnostic
+    """ Data read function for the W7-X webapi database
     data_name: should be a string, currently either:
         ECRH
         NBI-7
@@ -397,16 +706,24 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
                      'Time [s]': The read times
                      Only a single equidistant range is interpreted.
     options:
-        Time Start and Time Stop times can be given (see exp_id) e.g.
-         options={'Time Start':datetime.datetime(2018, 8, 22, 10, 46, 53),
-                  'Time Stop': datetime.datetime(2018, 8, 22, 10, 47, 8)}
-        Downsample - the sampling of the data
-        Scale Time - if set and True, then the data is normalized to seconds and 0s point is set to
-                     the start of the shot
-        Check Time Equidistant - if set and True, then the data is checked if it is equidistant in time.
-                              it is assumed to be equidistant, if the difference between the timesteps relatively small
-        Cache Data - Store a local copy of the data so as next time it is read from there
-        Cache Directory - Cache directory name. If None will store data under the source file directory.
+        Time Start and Time Stop : datetime.datetime
+            Times can be given as an alternative to exp_id e.g.
+            options={'Time Start':datetime.datetime(2018, 8, 22, 10, 46, 53),
+                     'Time Stop': datetime.datetime(2018, 8, 22, 10, 47, 8)}
+        Downsample : float, default is None
+            The sampling of the data to this frequency.
+        Scale Time : bool, default is False
+            if set and True, then the data is normalized to seconds and 0s point is set to
+            the start of the shot
+        Check Time Equidistant : bool , default is False
+            If set and True, then the data is checked if it is equidistant in time.
+            it is assumed to be equidistant, if the difference between the timesteps relatively small
+        Cache Data : bool, default is None
+            Store a local copy of the data so as next time it is read from there.
+        Cache Directory : str
+            Cache directory name. If None will store data under the source file directory.
+        V1 : bool, default is False
+            If True the new version of the program will be used: get_data_v1
     """
 
     options_default = {'Cache Data': True,
@@ -415,14 +732,24 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
                        'Time Start': None,
                        'Time Stop': None,
                        'Downsample': None,
-                       'Check Time Equidistant': False
+                       'Check Time Equidistant': False,
+                       'V1' : False
                        }
+    try:
+        options['V1']
+    except KeyError:
+        options['V1'] = False
+    if (options['V1']):
+        return get_data_v1(exp_id=exp_id, data_name=data_name, no_data=no_data, options=options, coordinates=coordinates, data_source=data_source)
+            
 
     _options = flap.config.merge_options(options_default,options,data_source='W7X_WEBAPI')
+ 
+    if (_options['V1']):
+        get_data_v1(exp_id=exp_id, data_name=data_name, no_data=no_data, options=options, coordinates=coordinates, data_source=data_source)
+        
 
-#    options = {**options_default, **options}
-
-    note = "" # any notes that are added to the dataobejct info
+    note = "" # any notes that are added to the dataobject info
     
     #checking if the data is already in the cache
     curr_path = os.path.dirname(os.path.abspath(__file__))
