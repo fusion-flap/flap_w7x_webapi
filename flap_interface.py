@@ -33,367 +33,6 @@ if (flap.VERBOSE):
 
 logger = logging.getLogger('flapLogger')
 
-
-classs DataDesc():
-    """
-       data_type: str
-           'list': data_list contains a list of final webapi names
-           'complex' : data_list contains a list of 2-element listst.
-                       Each element contains a final webapi name. The two-element lists
-                       are interpreted as complex signals.           
-    """
-    def __init__(data_type=None,data_list=None):
-        data_type = data_type
-        data_list = data_list
-        
-def interpret_signal(signal_name=None,exp_id=None, channel_config_file=None):
-
-    # Handling regular expressions
-    signal_list, si = flap.select_signals(None, signal_name)
-    
-    if (channel_config_file is None):
-        return [DataDesc(data_type='list',data_list=signal_list) for signal_list]        
-
-    if (exp_id is not None):
-        if ((type(exp_id) is not str) or (len(exp_id) != 12)):
-            raise TypeError("exp_id should be string in format YYYYMMDD.xxx")
-  
-    config = configparser.ConfigParser()
-    config.optionxform = str
-    read_ok = config.read(channel_config_file)
-    if (read_ok == []):
-        raise ValueError("Cannot open  webapi virtual name file "+channel_config_file) 
-    try:
-        entries = config.items('Virtual names')
-    except Exception as e:
-        raise ValueError("Invalid webapi virtual name file "+channel_config_file)
-    entry_descr = [e[0] for e in entries]
-    entry_values = [e[1] for e in entries]
-    # These will contain the selected entry names and values
-    values = []
-    entry_names = []
-    
-    for e,ev in zip(entry_descr, entry_values):
-        start_brace = e.find('(')
-        stop_brace = e.find(')')
-        if (start_brace * stop_brace < 0):
-            raise ValueError("Invalid entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
-        if (signal_name == e[:start_brace]):
-            if ((exp_id is None) and (start_brace > 0)):
-                raise ValueErrorr("Signal entry '{:s}' in virtual name file: {:s} has expID range, but expID is not given.".format(e, channel_config_file))                                 
-        if (start_brace > 0):
-            # ExpID range given
-            exp_id_range = e[start_brace+1:stop_brace].split('-')
-            if (len(exp_id_range) != 2):
-                raise ValueError("Invalid exp_id range in entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
-            if (exp_id_range[0].strip() == ''):
-                exp_id_start = None
-            else:
-                try:
-                    exp_id_start = int(exp_id_range[0])
-                except ValueError:
-                    raise ValueError("Invalid exp_id start in entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
-            if (exp_id_range[1].strip() == ''):
-                exp_id_stop = None
-            else:
-                try:
-                    exp_id_stop = int(exp_id_range[1])
-                except ValueError:
-                    raise ValueError("Invalid exp_id stop in entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
-            if ((exp_id_start is not None) and (int(exp_id) < exp_id_start) or \
-                (exp_id_stop is not None) and (int(exp_id) > exp_id_stop)) :
-                continue        
-            entry_names.append(e[:start_brace])
-        else:
-            entry_names.append(e)
-        values.append(ev)
-    
-    
-    
-def webapi_virtual_names(data_name, exp_id, channel_config_file,recursive=True):
-
-    """
-    Translates virtual data names to webapi entries.
-    Returns a list of virtual names and translated full names.
-    The list is read from the configuration file. The file is a standard
-    configuration file with one section [Virtual names]. Each entry looks
-    like one of the following templates.
-        Simple translation:
-            <name> = <webapi name>
-        Translation in an expID range, including ends:
-            <name>(startID-endID) = <webapi name>
-          One of startID or endID may be omitted.
-        <webapi name> can be either a single name or complex(name1, name2) which
-        will construct a complex signal from the two entries. 
-        It can also be a list of signals (aa,bb,...)
-    Wildcards are allowed in data names. Data names can be a single string or
-        list of strings.
-    Return value:
-        virt_names, webapi_str, webapi_names
-            virt names is a list of the interpreted names.
-        virt_str is the description from the virtual name translation file
-        webapi_names is a list of the same length as virt_names. Elements can be the following:
-        Elements can be the following:
-            string: a single webapi name
-            list: [<type>, <name1>, <name2>, ...]
-                type can be
-                  'complex': two webapi entries are expected (real, imag), complex
-                  signal will be created from them.
-
-    """
-    if ((type(exp_id) is not str) or (len(exp_id) != 12)):
-        raise TypeError("exp_id should be string in format YYYYMMDD.xxx")
-    exp_id_num = exp_id
- 
-    if (type(data_name ) is not list):
-        _data_name = [data_name]
-    else:
-        _data_name = data_name
-
-    # Handling regular expressions
-    select_list = []
-    for i,dn in enumerate(_data_name):    
-        sl, si = flap.select_signals(None, dn)
-        select_list += sl
-       
-    config = configparser.ConfigParser()
-    config.optionxform = str
-    read_ok = config.read(channel_config_file)
-    if (read_ok == []):
-        raise ValueError("Cannot open  webapi virtual name file "+channel_config_file) 
-    try:
-        entries = config.items('Virtual names')
-    except Exception as e:
-        raise ValueError("Invalid webapi virtual name file "+channel_config_file)
-    entry_descr = [e[0] for e in entries]
-    entry_values = [e[1] for e in entries]
-    # These will contain the selected entry names and values
-    values = []
-    entry_names = []
-    # Finding etries with matching exp_id
-    for e,ev in zip(entry_descr, entry_values):
-        start_brace = e.find('(')
-        stop_brace = e.find(')')
-        if (start_brace * stop_brace < 0):
-            raise ValueError("Invalid entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
-        if (start_brace > 0):
-            # ExpID range given
-            exp_id_range = e[start_brace+1:stop_brace].split('-')
-            if (len(exp_id_range) != 2):
-                raise ValueError("Invalid exp_id range in entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
-            if (exp_id_range[0].strip() == ''):
-                exp_id_start = None
-            else:
-                try:
-                    exp_id_start = int(exp_id_range[0])
-                except ValueError:
-                    raise ValueError("Invalid exp_id start in entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
-            if (exp_id_range[1].strip() == ''):
-                exp_id_stop = None
-            else:
-                try:
-                    exp_id_stop = int(exp_id_range[1])
-                except ValueError:
-                    raise ValueError("Invalid exp_id stop in entry '{:s}' in virtual name file: {:s}".format(e, channel_config_file))
-            if ((exp_id_start is not None) and (exp_id_num < exp_id_start) or \
-                (exp_id_stop is not None) and (exp_id_num > exp_id_stop)) :
-                continue        
-            entry_names.append(e[:start_brace])
-        else:
-            entry_names.append(e)
-        values.append(ev)
-    
-    # Here we produce a list of signal names with description
-    # If a signal_name_list[x] is None then descriptinon gives the name
-    # if a signal name is not None then it was interpreted in the virtual name file
-    #   If the description for this is not a list, it is a signal name
-    #   If the description for this is a list, then the first element defines what list:
-    #      ''       : simple list of signals or complex signal descriptions
-    #      'complex': A complex signal description, of two signals
-    signal_name_list = []
-    description_list = [] 
-    for i,sn in enumerate(select_list):
-        try:
-            index = entry_names.index(sn)
-        except ValueError:
-            signal_name_list.append(None)
-            description_list.append(sn)
-        if (index >= 0):
-            # Found in virtual name
-            descr = values[index]
-            start_brace = descr.find('(')
-            stop_brace = descr.find(')')
-            if (start_brace * stop_brace < 0):
-                raise ValueError("Invalid value '{:s}' in virtual name file: {:s}".format(descr, channel_config_file))
-            if (start_brace < 0):
-                simple_name = True
-                names_to_interpret = [descr]
-            if (start_brace >= 0):
-                names_to_interpret = descr[start_brace+1:stop_brace].split(',')
-                simple_name = False
-                name_type = descr[:start_brace].lower()
-            new_descr_list = []
-            new_name_list = []
-            new_complex = None
-            for il,name in enumerate(names_to_interpret):
-                new_names, interpr_str, new_descr = webapi_virtual_names(name, exp_id, channel_config_file,recursive=True)
-                # As we call recursively in the list there will be either non-interpreted names, lists of non-interpreted names or lists of complex
-                for i1 in range(len(new_names)):
-                    if (new_names[i1] is None):
-                        new_name_list.append(None)
-                        new_descr_list.append(new_descr[i1])
-                        new_complex
-                    else:
-                        if (type(new_descr[i1]) is not list):
-                            new_name_list.append(new_descr[i1])
-                            new_descr_list.append(new_descr[i1])
-                        else:
-                            
-                        
-                            
-                
-                # This is a list or complex description
-                # Interpreting elements of the list
-                new_list = []
-                new_select = []
-                new_complex = None
-                for il,name in enumerate(webapi_listr[1:]):
-                    orig_name, interpr_str, descr = webapi_virtual_names(name, exp_id, channel_config_file,recursive=True)
-                    if ((len(orig_name) == 1) and (orig_name[0] == None):
-                        # This was not further interpreted, continuing to next element
-                        new_list += descr
-                        new_select += orig_name
-                        new_complex = False
-                        continue
-                    else:
-                        if (type(descr[i]) is not list):
-                            if ((new_complex is not None) and new_complex):
-                                raise ValueError("Cannot mix complex and real signals in one DataObject")
-                            new_list.append(descr[0])
-                            new_complex = False
-
-                        
-                        
-                        
-                        
-                        if (type(descr[0]) is not list):
-                            if ((new_complex is not None) and new_complex):
-                                raise ValueError("Cannot mix complex and real signals in one DataObject")
-                            new_list.append(descr[0])
-                            new_complex = False
-                        else:
-                            if (descr[0][0] == ''):
-                                #This is interpreted as a simple list of names
-                                new_list += descr[0][1:]
-                                new_complex = False
-                            elif (descr[0][0].lower() == 'complex'):
-                                if ((new_complex is not None) and not new_complex):
-                                    raise ValueError("Cannot mix complex and real signals in one DataObject")
-                                orig_name_1, interpr_str_1, descr_1 = webapi_virtual_names(descr[0][1], exp_id, channel_config_file,recursive=True)
-                                if (orig_name_1[0] is None):
-                                    complex_input = descr_1[0]
-                                elif (type(descr_1) is not list):
-                                    complex_input_1 = descr_1[0]
-                                else:
-                                    raise ValueError("Complex signal description should have two signals.")
-                                orig_name_2, interpr_str_2, descr_2 = webapi_virtual_names(descr[0][2], exp_id, channel_config_file,recursive=True)
-                                if (orig_name_2[0] is None):
-                                    complex_input_2 = descr_2[0]
-                                elif (type(descr_2) is not list):
-                                    complex_input_2 = descr_2[0]
-                                else:
-                                    raise ValueError("Complex signal description should have two signals.")
-                                new_complex = True
-                                new_list.append(['complex',complex_input_1,complex_input_2])
-                if ((webapi_descr[i][0].lower() == 'complex') and len(new_list) != 2):
-                    raise ValueError("Complex signal description should have two signals.")
-                webapi_descr[i] = [webapi_descr[i][0]] + new_list  
-            
-                
-                webapi_descr.append([webapi_type] + webapi_list)
-                
-                for 
-            else:
-                webapi_descr.append(descr) 
-        else:
-            # Not found in virtual name file
-            select_list[i] = None
-            select_value_list.append(sn)
-            webapi_descr.append(sn)
-         
-    if (recursive):
-        # Re-interpreting interpreted virtual names
-        while (True):
-            for i in range(len(select_list)):
-                if (select_list[i] is not None):
-                    # This is a virtual name which was interpreted
-                    if (type(webapi_descr[i]) is not list):
-                        orig_name, interpr_str, descr = webapi_virtual_names([webapi_descr[i]], exp_id, channel_config_file,recursive=False)
-                        if ((len(orig_name) == 1) and (orig_name[0] is None)):
-                            # This was not further interpreted, continuing to next name
-                            continue
-                        else:
-                            # This was interpreted, removing this item and adding the interpretation to the end.
-                            del webapi_descr[i]
-                            del select_list[i]
-                            select_list += orig_name
-                            webapi_descr += descr
-                            break
-                    else:
-                        # This is a list or complex description
-                        # Interpreting elements of the list
-                        new_list = []
-                        new_select = []
-                        new_complex = None
-                        interpreted = False
-                        for il,name in enumerate(webapi_descr[1:]):
-                            orig_name, interpr_str, descr = webapi_virtual_names(name, exp_id, channel_config_file,recursive=True)
-                            if ((len(orig_name) == 1) and (orig_name[0] == None):
-                                # This was not further interpreted, continuing to next element
-                                new_list += descr
-                                new_select += orig_name
-                                new_complex = False
-                                continue
-                            else:
-                                if (type(descr[0]) is not list):
-                                    if ((new_complex is not None) and new_complex):
-                                        raise ValueError("Cannot mix complex and real signals in one DataObject")
-                                    new_list.append(descr[0])
-                                    new_complex = False
-                                else:
-                                    if (descr[0][0] == ''):
-                                        #This is interpreted as a simple list of names
-                                        new_list += descr[0][1:]
-                                        new_complex = False
-                                    elif (descr[0][0].lower() == 'complex'):
-                                        if ((new_complex is not None) and not new_complex):
-                                            raise ValueError("Cannot mix complex and real signals in one DataObject")
-                                        orig_name_1, interpr_str_1, descr_1 = webapi_virtual_names(descr[0][1], exp_id, channel_config_file,recursive=True)
-                                        if (orig_name_1[0] is None):
-                                            complex_input = descr_1[0]
-                                        elif (type(descr_1) is not list):
-                                            complex_input_1 = descr_1[0]
-                                        else:
-                                            raise ValueError("Complex signal description should have two signals.")
-                                        orig_name_2, interpr_str_2, descr_2 = webapi_virtual_names(descr[0][2], exp_id, channel_config_file,recursive=True)
-                                        if (orig_name_2[0] is None):
-                                            complex_input_2 = descr_2[0]
-                                        elif (type(descr_2) is not list):
-                                            complex_input_2 = descr_2[0]
-                                        else:
-                                            raise ValueError("Complex signal description should have two signals.")
-                                        new_complex = True
-                                        new_list.append(['complex',complex_input_1,complex_input_2])
-                        if ((webapi_descr[i][0].lower() == 'complex') and len(new_list) != 2):
-                            raise ValueError("Complex signal description should have two signals.")
-                        webapi_descr[i] = [webapi_descr[i][0]] + new_list  
-                        break
-            else:
-                # No further interpretation, stopping
-                break
-                    
-    return select_list, select_value_list, webapi_descr  
-
 def standard_dataobject(dataobject):
     '''Converts the input dataobject to a standard flap dataobject so that it can be saved and used by other users of
     flap without having to use flap_w7x_webapi
@@ -804,25 +443,24 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                        'Downsample': None,
                        'Check Time Equidistant': False,
                        'V1' : False,
-                       'Virtual name file' : 'Virtual_names_webapi.cfg',
+                       'Virtual name file' : None,
                        'Verbose' : False
                        }
   
     _options = flap.config.merge_options(options_default,options,data_source='W7X_WEBAPI')
  
-    if ((type(exp_id) is not str) or (len(exp_id) != 12)):
+    if ((exp_id is not None) and (type(exp_id) is not str) or (len(exp_id) != 12)):
         raise TypeError("exp_id should be string in format YYYYMMDD.xxx")
+        
+    if ((exp_id is None) and (_options['Time Start'] is None) and (_options['Time Stop'] is None)):
+        raise ValueError("Either exp_id or start and stop times should be set.")
     
-    if (_options['Virtual name file'] is not None):
-        try:
-            virt_names, virt_webapi_txt, virt_webapi = webapi_virtual_names(data_name, exp_id, _options['Virtual name file'])
-        except Exception as e:
-            raise e
+    data_description = flap.interpret_signals(data_name,exp_id=exp_id,virtual_signal_file=_options['Virtual name file'])
     
     if coordinates is not None:
         coord = coordinates[0]
         if (coord.unit.name == 'Time') and (coord.mode.equidistant):
-                read_range = [float(coord.c_range[0]), float(coord.c_range[1])]
+            read_range = [float(coord.c_range[0]), float(coord.c_range[1])]
         else:
             raise ValueError("Only timeranges may be defined for reading")
     else:
@@ -833,48 +471,32 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
     signal_list = []
     # This will collect the names of all signals.
     signal_name_list = []
-    # This iwll collect the common timescale for all signals
+    # This will collect the common timescale for all signals
     common_time = None    
     # This will contain the data type (complex or float) of the data
     common_dtype = None
     # This will contain the data unit returned by webapi
     common_unit = None
     
-    # This cycle goes through the singals listed in data_name
-    for name, webapi_descr in zip(virt_names,virt_webapi):
+
+    if (data_description.data_type == 'real'):
+        complex_data = False
+    elif (data_description.data_type == 'complex'):
+        complex_data = True
+    else:
+        raise TypeError("Invalid signal type. This is an internal error.") 
+                 
+    # This cycle goes through the singals listed in data_description   
+    for signal in data_description.signal_list:
         # Assembling a list of webapi nodes needed for this data
-        webapi_request_list = []
-        # readtype will indicate how to handle read signals:
-        #    0: This is a single signal
-        #    1: This needs multiple signal reads. What to do is decided by webapi_descr[0]
-        if (name is None):
-            # This was not recognized as virtual name
-            webapi_request_list = [webapi_descr]
-            readtype = 0
+        if (complex_data):
+            webapi_request_list = signal
+            signal_name_list.append('complex({:s},{:s})'.format(signal[0],signal[1]))
         else:
-            # This was recgnized as a virtual signal
-            if (type(webapi_descr) is not list):
-                # This was recognized as a single webapi node
-                webapi_request_list = [webapi_descr]
-                readtype = 0
-            else:
-                # This is a composite virtual signal
-                webapi_request_list = webapi_descr[1:]
-                readtype = 1 
-                if (webapi_descr[0].lower() == 'complex'):
-                    # This will be finally a complex signal built from two webapi nodes
-                    pass
-                elif(webapi_descr[0] == ''):
-                    # This is just a list of webapi nodes, will 
-                    pass
-                else:
-                    raise ValueError("Unrecognized complex virtual signal description.") 
-                   
-        
-        # Processing regular expressions
-        webapi_request_list = flap.select_signals(None,webapi_request_list)[0]
-        
-        # This variable collects data for theo constituents of one data_name
+            webapi_request_list = [signal]
+            signal_name_list.append(signal)
+
+        # This variable collects data for the constituents of one data_name
         webapi_data_list = []
         # Common parameters for this data _name
         data_ndim = None
@@ -929,7 +551,7 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                             if (exp_id is None):
                                 # In this case the read_range is an absolute time
                                 if ((read_range[0] < this_time[0]) or (read_range[1] > this_time[1])):
-                                    data_cache = False
+                                    data_cached = False
                             else:
                                 if (exp_id_from_cache is None):
                                     # The cached data is not linked to an exp_id. We don't know here the 
@@ -939,7 +561,7 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                                     # In this case the read_range is a relative time in the experiment
                                     if ((read_range[0] < this_time[0] - shot_ref_time_from_cache) 
                                         or (read_range[1] > this_time[1] - shot_ref_time_from_cache)):
-                                            data_cache = False
+                                            data_cached = False
                         break    
                 else:
                     data_cached = False
@@ -980,7 +602,6 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                     else:
                         new_stop = orig_start + float((read_range[1])*1e9)
                     data_setup.time_query = "_signal.json?from=" + str(new_start) + '&upto=' + str(new_stop)
-                    this_shot_ref_time = new_start
                                                          
                 # Downsampling the data if requested
                 if _options['Downsample'] is not None:
@@ -997,13 +618,13 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                 if (_options['Verbose']):
                     print("Read {:d} samples.".format(len(webapi_data['values'])),flush=True)
                 if (webapi_data['dimensionCount'] != 1):
-                    raise NotImplementedError("Only onedimensional data read is supported now. This data has {:d} dimensions.".format(data_ndim = webapi_data['dimensionCount']))
+                    raise NotImplementedError("Only one-dimensional data read is supported now. This data has {:d} dimensions.".format(webapi_data['dimensionCount']))
                 this_data = np.array(webapi_data['values'])
                 this_time = np.array(webapi_data['dimensions'])
                 this_unit = webapi_data['unit']
                    
             if (len(webapi_data_list) == 0):
-                # If this is the first signal in this (virtual) signal storing common parameters of the virtual signal
+                # If this is the first signal in this signal storing common parameters of the virtual signal
                 if (exp_id is not None):
                     ref_time = shot_ref_time
                 else:
@@ -1052,27 +673,6 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                     break
         # End of collecting all data for a data_name constituents
         
-        if (_options['Verbose']):
-            print("readtype:{:d}".format(readtype))
-            if (readtype == 1):
-                print("webapi_descr[0]:'{:s}'".format(webapi_descr[0]))
-        
-        # Handling composite signals
-        if (name is None):
-            signal_name_list.append(webapi_descr) 
-        else:
-            if (type(webapi_descr) is not list):
-                signal_name_list.append(name) 
-            else:
-                # This is a composite virtual signal
-                if (webapi_descr[0].lower() == 'complex'):
-                    # This will be finally a complex signal built from two webapi nodes
-                    signal_name_list.append(name)
-                    webapi_data = [np.array((webapi_data[0],webapi_data[1]),dtype='complex')]
-                elif(webapi_descr[0] == ''):
-                    # This is just a list of webapi nodes, will 
-                    signal_name_list += webapi_descr[1:]
-
         if (len(signal_list) == 0):
             # This is the first data_name processed
             common_time = data_time
@@ -1089,7 +689,10 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                 raise ValueError("Signals have different data type (complex, float). Cannot construct one flap.DataObject.")
             if (common_unit != data_unit):
                 raise ValueError("Signals have different data unit. Cannot construct one flap.DataObject.")
-        signal_list += webapi_data_list     
+        if (complex_data):
+            signal_list.append(webapi_data_list[0] + 1j * webapi_data_list[1])
+        else:
+            signal_list.append(webapi_data_list[0])
 
     if (_options['Check Time Equidistant']):
         mean_tstep = (data_time[-1] - data_time[0]) / (len(data_time) - 1)
@@ -1120,8 +723,6 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                            coordinates=[coord_time,coord_sample,coord_signal],
                            exp_id=exp_id,data_title='W7-X data'
                            )
-
-    
 
 def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates=None, data_source=None):
     """ Data read function for the W7-X webapi database
