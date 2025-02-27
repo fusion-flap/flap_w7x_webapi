@@ -396,6 +396,7 @@ def stream_gen_OP2(signal_id):
     stream_dict["QSI-CXRS"] = \
         "Test/raw/W7X/QSI/cxrs_DATASTREAM/0/Images/"
     
+    
     if signal_id in stream_dict:
         return stream_dict[signal_id]
     elif signal_id[0:4] == 'Zeff':
@@ -469,6 +470,9 @@ def stream_gen_curr(signal_id):
     # QSI-CXRS data
     stream_dict["QSI-CXRS"] = \
         "Test/raw/W7X/QSS_DivertorSpectroscopy/PI_CCD_06_1-QSS60OC095_DATASTREAM/0/Images/"
+    # WDia data
+    stream_dict["Wdia"] = \
+            "ArchiveDB/raw/W7X/ControlStation.2161/Wdia_DATASTREAM/0/Diamagnetic%20Energy/"
     # WDia data
     stream_dict["Wdia"] = \
             "ArchiveDB/raw/W7X/ControlStation.2161/Wdia_DATASTREAM/0/Diamagnetic%20Energy/"
