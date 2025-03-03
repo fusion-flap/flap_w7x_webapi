@@ -550,8 +550,18 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                         if (read_range is not None):
                             if (exp_id is None):
                                 # In this case the read_range is an absolute time
-                                if ((read_range[0] < this_time[0]) or (read_range[1] > this_time[1])):
+                                if ((read_range[0] < this_time[0]) or (read_range[1] > this_time[-1])):
                                     data_cached = False
+                                else:
+                                    ind = np.nonzero(np.logical_and(this_time >= read_range[0],
+                                                                    this_time <= read_range[1]
+                                                                    )[0]
+                                                    )
+                                    if (len(ind) == 0):
+                                        data_cached = False
+                                    else:
+                                        this_time = this_time[ind]
+                                        this_data = this_data[ind]
                             else:
                                 if (exp_id_from_cache is None):
                                     # The cached data is not linked to an exp_id. We don't know here the 
@@ -559,9 +569,19 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                                     data_cached = False
                                 else:
                                     # In this case the read_range is a relative time in the experiment
-                                    if ((read_range[0] < this_time[0] - shot_ref_time_from_cache) 
-                                        or (read_range[1] > this_time[1] - shot_ref_time_from_cache)):
+                                    if ((read_range[0] < (this_time[0] - shot_ref_time_from_cache) /1e9) 
+                                        or (read_range[1] > (this_time[-1] - shot_ref_time_from_cache) / 1e9)):
                                             data_cached = False
+                                    else:
+                                        ind = np.nonzero(np.logical_and((this_time - shot_ref_time_from_cache) /1e9 >= read_range[0],
+                                                                        (this_time - shot_ref_time_from_cache) /1e9 <= read_range[1])
+                                                         )[0]
+                                        if (len(ind) == 0):
+                                            data_cached = False
+                                        else:
+                                            this_time = this_time[ind]
+                                            this_data = this_data[ind]
+
                         break    
                 else:
                     data_cached = False
@@ -583,7 +603,7 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                      shot_ref_time = int(data_setup.time_query.split('=')[1].split('&')[0])
                      ref_time= shot_ref_time
 
-                start_shift = decimal.Decimal(0)
+                start_shift =int(0)
                 if coordinates is not None:
                     coord = coordinates[0]
                     if (coord.unit.name == 'Time') and (coord.mode.equidistant):
@@ -591,17 +611,21 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                     else:
                         raise ValueError("Only timeranges may be defined for reading")
                     orig_times = data_setup.time_query.split('=')
-                    orig_start = float((orig_times[1].split('&'))[0])
+                    orig_start = int((orig_times[1].split('&'))[0])
                     if int(exp_id[:8]) <= 20221001:
-                        start_shift = float((read_range[0]+1.0)*1e9)
+                        start_shift = int((read_range[0] + 1) * 1000000000)
                     else:
-                        start_shift = float(read_range[0]*1e9)
+                        start_shift = int(read_range[0] * 1000000000)
                     new_start = orig_start + start_shift
                     if int(exp_id[:8]) <= 20221001:
-                        new_stop = orig_start + float((read_range[1]+1.0)*1e9)
+                        new_stop = orig_start + int((read_range[1] + 1) * 1000000000)
                     else:
-                        new_stop = orig_start + float((read_range[1])*1e9)
-                    data_setup.time_query = "_signal.json?from=" + str(new_start) + '&upto=' + str(new_stop)
+                        new_stop = orig_start + int((read_range[1]) * 1000000000)
+                        
+                    # Increasing the time interval a bit to ensure that the required data is in the range
+                    new_start -= 100000
+                    new_stop += 100000
+                    data_setup.time_query = "_signal.json?from=" + str(int(new_start)) + '&upto=' + str(int(new_stop))
                                                          
                 # Downsampling the data if requested
                 if _options['Downsample'] is not None:
@@ -711,16 +735,20 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
         coord_signal = flap.Coordinate(name='Signal name',mode=flap.coordinate.CoordinateMode(equidistant=False),shape=[],
                                        values=signal_name_list,dimension_list=[])
         d = np.array(signal_list[0])
+        coordinates=[coord_time,coord_sample,coord_signal]
     else:
         d = np.ndarray((len(signal_list[0]),len(signal_list)),dtype=signal_list[0].dtype)
         for i,s in enumerate(signal_list):
             d[:,i] = s
         coord_signal = flap.Coordinate(name='Signal name',mode=flap.coordinate.CoordinateMode(equidistant=False),shape=len(signal_name_list),
                                        values=signal_name_list,dimension_list=[1])
+        coord_sn = flap.Coordinate(name='Signal number',mode=flap.coordinate.CoordinateMode(equidistant=True),shape=len(signal_name_list),
+                                   start=1,step=1,dimension_list=[1])
+        coordinates=[coord_time,coord_sample,coord_signal,coord_sn]
         
     return flap.DataObject(data_array=d,
                            data_unit=flap.Unit(name='Signal',unit=data_unit),
-                           coordinates=[coord_time,coord_sample,coord_signal],
+                           coordinates=coordinates,
                            exp_id=exp_id,data_title='W7-X data'
                            )
 
