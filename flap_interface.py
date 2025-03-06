@@ -521,10 +521,14 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                 filename = os.path.join(directory,filename+'.pickle')
                 if (not _options['Renew Cache']):
                     while True:
+                        if (_options['Verbose']):
+                            print("Reading cache file: '{:s}'.".format(filename),flush=True)
                         try:
                             f = io.open(filename,'rb')
                         except:
                             data_cached = False
+                            if (_options['Verbose']):
+                                print("Cannot open cache file.",flush=True)
                             break
                         try:
                             webapi_pickle = pickle.load(f)
@@ -534,7 +538,7 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                             shot_ref_time_from_cache = webapi_pickle[3]
                             this_unit = webapi_pickle[4]
                         except Exception:
-                            print("Invalid cache file: {:s}".format(filename))
+                            print("Invalid cache file: {:s}".format(filename),flush=True)
                             data_cached = False
                             f.close()
                             break
@@ -551,6 +555,8 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                             if (exp_id is None):
                                 # In this case the read_range is an absolute time
                                 if ((read_range[0] < this_time[0]) or (read_range[1] > this_time[-1])):
+                                    if (_options['Verbose']):
+                                        print("Requested time range is outside of time range in cache file.",flush=True)
                                     data_cached = False
                                 else:
                                     ind = np.nonzero(np.logical_and(this_time >= read_range[0],
@@ -558,6 +564,8 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                                                                     )[0]
                                                     )
                                     if (len(ind) == 0):
+                                        if (_options['Verbose']):
+                                            print("No data in cache file in requested time range.",flush=True)
                                         data_cached = False
                                     else:
                                         this_time = this_time[ind]
@@ -566,8 +574,12 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                                 if (exp_id_from_cache is None):
                                     # The cached data is not linked to an exp_id. We don't know here the 
                                     # time of the experiment, we don't use the cached data
+                                    if (_options['Verbose']):
+                                        print("Data in cache file is not linked to experiment.",flush=True)
                                     data_cached = False
                                 else:
+                                    if (read_range[0] < 0):
+                                        read_range[0] = 0
                                     # In this case the read_range is a relative time in the experiment
                                     if ((read_range[0] < (this_time[0] - shot_ref_time_from_cache) /1e9) 
                                         or (read_range[1] > (this_time[-1] - shot_ref_time_from_cache) / 1e9)):
@@ -599,9 +611,12 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                         ref_time = 0 
                         shot_ref_time = None
                 else:
-                     data_setup.shotid_time_query_gen(exp_id)
-                     shot_ref_time = int(data_setup.time_query.split('=')[1].split('&')[0])
-                     ref_time= shot_ref_time
+                    try:
+                         data_setup.shotid_time_query_gen(exp_id)
+                         shot_ref_time = int(data_setup.time_query.split('=')[1].split('&')[0])
+                         ref_time= shot_ref_time
+                    except ConnectionError:
+                        raise ConnectionError("Cannot access webapi to read {:s} from {:s}.".format(webapi_name,exp_id))
 
                 start_shift =int(0)
                 if coordinates is not None:
