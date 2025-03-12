@@ -554,7 +554,8 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                         if (read_range is not None):
                             if (exp_id is None):
                                 # In this case the read_range is an absolute time
-                                if ((read_range[0] < this_time[0]) or (read_range[1] > this_time[-1])):
+                                this_tres = this_time[1] - this_time[0]
+                                if ((read_range[0] < this_time[0] - this_tres) or (read_range[1] > this_time[-1] + this_tres)):
                                     if (_options['Verbose']):
                                         print("Requested time range is outside of time range in cache file.",flush=True)
                                     data_cached = False
@@ -581,9 +582,12 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                                     if (read_range[0] < 0):
                                         read_range[0] = 0
                                     # In this case the read_range is a relative time in the experiment
-                                    if ((read_range[0] < (this_time[0] - shot_ref_time_from_cache) /1e9) 
-                                        or (read_range[1] > (this_time[-1] - shot_ref_time_from_cache) / 1e9)):
+                                    this_tres = this_time[1] - this_time[0]
+                                    if ((read_range[0] < (this_time[0] - shot_ref_time_from_cache - this_tres) /1e9) 
+                                        or (read_range[1] > (this_time[-1] - shot_ref_time_from_cache + this_tres) / 1e9)):
                                             data_cached = False
+                                            if (_options['Verbose']):
+                                                print("Requested time range is outside of time range in cache file.",flush=True)
                                     else:
                                         ind = np.nonzero(np.logical_and((this_time - shot_ref_time_from_cache) /1e9 >= read_range[0],
                                                                         (this_time - shot_ref_time_from_cache) /1e9 <= read_range[1])
