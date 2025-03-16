@@ -449,6 +449,10 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
   
     _options = flap.config.merge_options(options_default,options,data_source='W7X_WEBAPI')
  
+    # This is a date until which a 1 second shift in the time axis is applied
+    start_shift_date = '20251231'
+    print("Start shift date needs to be discussed!!!")
+    
     if ((exp_id is not None) and (type(exp_id) is not str) or (len(exp_id) != 12)):
         raise TypeError("exp_id should be string in format YYYYMMDD.xxx")
         
@@ -587,7 +591,12 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                                         or (read_range[1] > (this_time[-1] - shot_ref_time_from_cache + this_tres) / 1e9)):
                                             data_cached = False
                                             if (_options['Verbose']):
-                                                print("Requested time range is outside of time range in cache file.",flush=True)
+                                                print("Requested time range ({:7.3f}-{:7.3f}) is outside of time range in cache file ({:7.3f}-{:7.3f}).".format(read_range[0],
+                                                                                                                                                read_range[1],
+                                                                                                                                                (this_time[0] - shot_ref_time_from_cache - this_tres) /1e9,
+                                                                                                                                                (this_time[-1] - shot_ref_time_from_cache + this_tres) / 1e9),
+                                                                                                                                            flush=True
+                                                      )
                                     else:
                                         ind = np.nonzero(np.logical_and((this_time - shot_ref_time_from_cache) /1e9 >= read_range[0],
                                                                         (this_time - shot_ref_time_from_cache) /1e9 <= read_range[1])
@@ -631,12 +640,13 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                         raise ValueError("Only timeranges may be defined for reading")
                     orig_times = data_setup.time_query.split('=')
                     orig_start = int((orig_times[1].split('&'))[0])
-                    if int(exp_id[:8]) <= 20221001:
+                    print("Start shift needs to be dicussed!!!")
+                    if int(exp_id[:8]) <= int(start_shift_date):
                         start_shift = int((read_range[0] + 1) * 1000000000)
                     else:
                         start_shift = int(read_range[0] * 1000000000)
                     new_start = orig_start + start_shift
-                    if int(exp_id[:8]) <= 20221001:
+                    if int(exp_id[:8]) <= int(start_shift_date):
                         new_stop = orig_start + int((read_range[1] + 1) * 1000000000)
                     else:
                         new_stop = orig_start + int((read_range[1]) * 1000000000)
@@ -851,7 +861,7 @@ def get_data(exp_id=None, data_name=None, no_data=False, options={}, coordinates
 
     get_vector = False
     if data_name[0:3] == "TS-":
-        #old data was uploadid in a differen manner
+        #old data was uploaded in a differen manner
         if int(exp_id[:8]) <= 20221001:
             data_setup = archive_signal.ArchiveSignal(data_name+"-data-vol1", exp_id=exp_id)
             get_vector = True
