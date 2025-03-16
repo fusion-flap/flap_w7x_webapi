@@ -625,9 +625,20 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                         shot_ref_time = None
                 else:
                     try:
-                         data_setup.shotid_time_query_gen(exp_id)
-                         shot_ref_time = int(data_setup.time_query.split('=')[1].split('&')[0])
-                         ref_time= shot_ref_time
+                        data_setup.shotid_time_query_gen(exp_id)
+                        orig_times = data_setup.time_query.split('=')
+                        orig_start = int((orig_times[1].split('&'))[0])
+                        orig_stop = int(orig_times[2])
+                        shot_ref_time = int(data_setup.time_query.split('=')[1].split('&')[0])
+                        if int(exp_id[:8]) <= int(start_shift_date):
+                            start_shift = 1000000000
+                        else:
+                            start_shift = 0
+                        new_start = orig_start + start_shift
+                        new_stop = orig_stop + start_shift
+                        shot_ref_time = new_start
+                        ref_time= shot_ref_time
+                        data_setup.time_query = "_signal.json?from=" + str(int(new_start)) + '&upto=' + str(int(new_stop))   
                     except ConnectionError:
                         raise ConnectionError("Cannot access webapi to read {:s} from {:s}.".format(webapi_name,exp_id))
 
@@ -640,20 +651,9 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                         raise ValueError("Only timeranges may be defined for reading")
                     orig_times = data_setup.time_query.split('=')
                     orig_start = int((orig_times[1].split('&'))[0])
-                    print("Start shift needs to be dicussed!!!")
-                    if int(exp_id[:8]) <= int(start_shift_date):
-                        start_shift = int((read_range[0] + 1) * 1000000000)
-                    else:
-                        start_shift = int(read_range[0] * 1000000000)
-                    new_start = orig_start + start_shift
-                    if int(exp_id[:8]) <= int(start_shift_date):
-                        new_stop = orig_start + int((read_range[1] + 1) * 1000000000)
-                    else:
-                        new_stop = orig_start + int((read_range[1]) * 1000000000)
-                        
                     # Increasing the time interval a bit to ensure that the required data is in the range
-                    new_start -= 100000
-                    new_stop += 100000
+                    new_start = orig_start + read_range[0] * 1000000000 - 100000
+                    new_stop = orig_start + read_range[1] * 1000000000 + 100000                     
                     data_setup.time_query = "_signal.json?from=" + str(int(new_start)) + '&upto=' + str(int(new_stop))
                                                          
                 # Downsampling the data if requested
