@@ -462,11 +462,14 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
     data_description = flap.interpret_signals(data_name,exp_id=exp_id,virtual_signal_file=_options['Virtual name file'])
     
     if coordinates is not None:
-        coord = coordinates[0]
-        if (coord.unit.name == 'Time') and (coord.mode.equidistant):
-            read_range = [float(coord.c_range[0]), float(coord.c_range[1])]
-        else:
-            raise ValueError("Only timeranges may be defined for reading")
+        try:
+            coord = coordinates[0]
+            if (coord.unit.name == 'Time') and (coord.mode.equidistant):
+                read_range = [float(coord.c_range[0]), float(coord.c_range[1])]
+            else:
+                raise ValueError("Only timeranges may be defined for reading")
+        except IndexError:
+            read_range = None
     else:
         read_range = None
             
@@ -491,7 +494,7 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
         raise TypeError("Invalid signal type. This is an internal error.") 
                  
     # This cycle goes through the singals listed in data_description   
-    for signal in data_description.signal_list:
+    for i_signal,signal in enumerate(data_description.signal_list):
         # Assembling a list of webapi nodes needed for this data
         if (complex_data):
             webapi_request_list = signal
@@ -675,7 +678,7 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                 this_data = np.array(webapi_data['values'])
                 this_time = np.array(webapi_data['dimensions'])
                 this_unit = webapi_data['unit']
-                   
+
             if (len(webapi_data_list) == 0):
                 # If this is the first signal in this signal storing common parameters of the virtual signal
                 if (exp_id is not None):
@@ -732,6 +735,8 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
             common_dtype = webapi_data_list[0].dtype
             common_unit = data_unit
         else:
+            if (len(common_time) != len (data_time)):
+                raise ValueError("Different data length for signals. Try renewing cache.")
             if (len(np.nonzero(np.absolute(common_time - data_time) \
                                > ((common_time[1] - common_time[0]) / len(common_time + 1)) * 0.5
                                )[0]
@@ -746,6 +751,11 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
             signal_list.append(webapi_data_list[0] + 1j * webapi_data_list[1])
         else:
             signal_list.append(webapi_data_list[0])
+        if (data_description.invert is not None):
+            if (data_description.invert[i_signal]):
+                signal_list[-1] *= -1
+               
+
 
     if (_options['Check Time Equidistant']):
         mean_tstep = (data_time[-1] - data_time[0]) / (len(data_time) - 1)
