@@ -432,6 +432,8 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
             If True the new version of the program will be used: get_data_v1
         Verbose : bool
             Print diagnostic messages.
+        Start shift : numeric or None
+            The time shift to apply to the webapi quer.y
     """
 
     options_default = {'Cache Data': True,
@@ -444,7 +446,8 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                        'Check Time Equidistant': False,
                        'V1' : False,
                        'Virtual name file' : None,
-                       'Verbose' : False
+                       'Verbose' : False,
+                       'Start shift' : None
                        }
   
     _options = flap.config.merge_options(options_default,options,data_source='W7X_WEBAPI')
@@ -493,7 +496,7 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
     else:
         raise TypeError("Invalid signal type. This is an internal error.") 
                  
-    # This cycle goes through the singals listed in data_description   
+    # This cycle goes through the signals listed in data_description   
     for i_signal,signal in enumerate(data_description.signal_list):
         # Assembling a list of webapi nodes needed for this data
         if (complex_data):
@@ -633,10 +636,13 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                         orig_start = int((orig_times[1].split('&'))[0])
                         orig_stop = int(orig_times[2])
                         shot_ref_time = int(data_setup.time_query.split('=')[1].split('&')[0])
-                        if int(exp_id[:8]) <= int(start_shift_date):
-                            start_shift = 1000000000
+                        if (_options['Start shift'] is None):
+                            if int(exp_id[:8]) <= int(start_shift_date):
+                                start_shift = 1000000000
+                            else:
+                                start_shift = 0
                         else:
-                            start_shift = 0
+                            start_shift = _options['Start shift'] * 1000000000
                         new_start = orig_start + start_shift
                         new_stop = orig_stop + start_shift
                         shot_ref_time = new_start
@@ -645,7 +651,6 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                     except ConnectionError:
                         raise ConnectionError("Cannot access webapi to read {:s} from {:s}.".format(webapi_name,exp_id))
 
-                start_shift =int(0)
                 if coordinates is not None:
                     coord = coordinates[0]
                     if (coord.unit.name == 'Time') and (coord.mode.equidistant):
