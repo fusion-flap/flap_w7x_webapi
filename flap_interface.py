@@ -433,7 +433,14 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
         Verbose : bool
             Print diagnostic messages.
         Start shift : numeric or None
-            The time shift to apply to the webapi quer.y
+            The time shift to apply to the webapi quer.
+        Force timescale : bool, flap.Coordinate or flap.DataObject
+            If False any difference between the timescales (sample times) between signals results in ValueError
+            If True the timescale of the first signal will be used. Signals with a different timescale will be interpolated
+            to that.
+            If flap.Coordinate with name 'Time' the signals will be interpolated to this timescale
+            If flap.DataObject and unit.name is 'Time' the data will be used as timescale
+            If flap.DataObject and unit.name is not 'Time' but there is a coordinate named 'Time' it will be used.
     """
 
     options_default = {'Cache Data': True,
@@ -447,7 +454,8 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                        'V1' : False,
                        'Virtual name file' : None,
                        'Verbose' : False,
-                       'Start shift' : None
+                       'Start shift' : None,
+                       'Force timescale' : False
                        }
   
     _options = flap.config.merge_options(options_default,options,data_source='W7X_WEBAPI')
@@ -690,22 +698,44 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                     ref_time = shot_ref_time
                 else:
                     ref_time = 0
+                if (type(_options['Force timescale']) is bool): 
+                    data_time = this_time
+                else:
+                    if (type(_options['Force timescale']) is flap.Coordinate):
+                        if (_options['Force timescale'].unit.name != 'Time'):
+                            raise TypeError("flap.Coordinate object given for timescale is not named 'Time'.")
+                        data_time = _options['Force timescale'].data(data_shape=this_data.shape)[0]
+                    elif (type(_options['Force timescale']) is flap.DataObject):
+                        if (_options['Force timescale'].unit.name != 'Time'):
+                            data_time = _options['Force timescale'].data
+                        else:
+                            try:
+                                data_time = _options['Force timescale'].coordinate('Time',options={'Change only':True})[0]
+                            except:
+                                raise TypeError("No timescale found in DataObject.")
+                    if (data_time.ndim != 1):
+                        raise TypeError("Multi-dimensional data given as timescale.")
+                    if (not np.isreal(data_time.dtype)):
+                        raise TypeError("Data given for timescale is not real.")
+                    dtype = this_data.dtype
+                    this_data = np.interp(data_time,this_time,this_data)                           
                 webapi_data_list.append(this_data)
                 data_ndim = this_data.ndim
                 data_shape = this_data.shape
-                data_time = this_time
                 data_unit = this_unit
             else:
+                if (data_unit != this_unit):
+                    raise TypeError("Multiple webapi data cannot be combined into one DataObject: different data unit.")
+                data_tres = (data_time[-1] - data_time[0]) / (len(data_time) - 1)                
+                if ((len(data_time) != len(this_time)) 
+                    or (len(np.nonzero(np.absolute(data_time - this_time) > data_tres * 0.1)[0] ) != 0)
+                    ):
+                    if ((type(_options['Force timescale']) is bool) and not _options['Force timescale']):
+                        raise TypeError("Multiple webapi data cannot be combined: different timescale. Use option 'Force timescale'.")     
+                    this_data = np.interp(data_time,this_time,this_data)
                 # If this is not the first signal in the virtual signal checking if common parameters agree with other signals
                 if (data_ndim != this_data.ndim):
                     raise TypeError("Multiple webapi data cannot be combined into one DataObject: different number of dimensions.")
-                for i_d in range(data_ndim):
-                    if (data_shape[i_d] != this_data.shape[i_d]):                       
-                        raise TypeError("Multiple webapi data cannot be combined into one DataObject: different data shape.")
-                if (data_unit != this_unit):
-                    raise TypeError("Multiple webapi data cannot be combined into one DataObject: different data unit.")
-                if (len(np.nonzero(data_time != this_time)[0]) != 0):
-                    raise TypeError("Multiple webapi data cannot be combined into one DataObject: different timescale.")                        
                 webapi_data_list.append(this_data)
                 
             if (not data_cached and _options['Cache Data'] and (_options['Cache Directory'] is not None)):
@@ -724,31 +754,56 @@ def get_data_v1(exp_id=None, data_name=None, no_data=False, options={}, coordina
                     try:
                         pickle.dump(webapi_data_pickle,f)
                     except Exception as e:
-                        print("Warning: Cannot write cache file: "+filename)
+                        print("Warning: Cannot write cache file: "+filename+' '+str(e))
                         break
                     try:
                         f.close()
                         del webapi_data_pickle
                     except Exception as e:
-                        print("Warning: Cannot close cache file: "+filename)
+                        print("Warning: Cannot close cache file: "+filename+' '+str(e))
                     break
         # End of collecting all data for a data_name constituents
         
         if (len(signal_list) == 0):
-            # This is the first data_name processed
-            common_time = data_time
+            # This is the first data_name processed determining timescale, data unit and data type
+            if (type(_options['Force timescale']) is bool): 
+                common_time = data_time
+            else:
+                if (type(_options['Force timescale']) is flap.Coordinate):
+                    if (_options['Force timescale'].unit.name != 'Time'):
+                        raise TypeError("flap.Coordinate object given for timescale is not named 'Time'.")
+                    common_time = _options['Force timescale'].data(data_shape=this_data.shape)[0]
+                elif (type(_options['Force timescale']) is flap.DataObject):
+                    if (_options['Force timescale'].unit.name != 'Time'):
+                        common_time = _options['Force timescale'].data
+                    else:
+                        try:
+                            common_time = _options['Force timescale'].coordinate('Time',options={'Change only':True})[0]
+                        except:
+                            raise TypeError("No timescale found in DataObject.")
+                if (common_time.ndim != 1):
+                    raise TypeError("Multi-dimensional data given as timescale.")
+                if (not np.isreal(common_time.dtype)):
+                    raise TypeError("Data given for timescale is not real.")
+                for i in len(webapi_data_list):
+                    webapi_data_list[i] = np.interp(common_time,data_time,webapi_data_list[i])                           
             common_dtype = webapi_data_list[0].dtype
             common_unit = data_unit
         else:
-            if (len(common_time) != len (data_time)):
-                raise ValueError("Different data length for signals. Try renewing cache.")
-            if (len(np.nonzero(np.absolute(common_time - data_time) \
-                               > ((common_time[1] - common_time[0]) / len(common_time + 1)) * 0.5
-                               )[0]
-                    ) != 0
+            common_tres = (common_time[-1] - common_time[0]) / (len(common_time) - 1)
+            if ((len(common_time) != len(data_time)) 
+                or (len(np.nonzero(np.absolute(common_time - data_time) > common_tres * 0.1)[0]
+                        ) != 0
+                    )
+               ):
+                if ((type(_options['Force timescale']) is bool) and not _options['Force timescale']):
+                    raise TypeError("Multiple webapi data cannot be combined: different timescale. Use option 'Force timescale'.")     
+                for i in range(len(webapi_data_list)):
+                    dtype = webapi_data_list[i].dtype 
+                    webapi_data_list[i] = np.interp(common_time,data_time,webapi_data_list[i]).astype(dtype)                        
+            if ((common_dtype == np.complex128) and  (webapi_data_list[0].dtype != np.complex128)
+                or (common_dtype != np.complex128) and  (webapi_data_list[0].dtype == np.complex128)
                 ):
-                raise ValueError("Signals have different timescale. Cannot construct one flap.DataObject.")
-            if (common_dtype != webapi_data_list[0].dtype):
                 raise ValueError("Signals have different data type (complex, float). Cannot construct one flap.DataObject.")
             if (common_unit != data_unit):
                 raise ValueError("Signals have different data unit. Cannot construct one flap.DataObject.")
