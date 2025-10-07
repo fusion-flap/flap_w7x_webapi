@@ -65,13 +65,17 @@ def get_overview_data(exp_id,options=None,mean=False):
                       
     _options = flap.config.merge_options(default_options,options,section='W7-X_Overview')
     
-    day_dir = os.path.join(_options['HDF path'],exp_id[2:8],'w7x')
+    day_dir = os.path.join(_options['HDF path'],exp_id[2:8])
+    if (not os.path.exists(day_dir)):
+        day_dir = os.path.join(_options['HDF path'],exp_id[:8])
+        if (not os.path.exists(day_dir)):
+            raise ValueError("Cannot find directory of day.")
+    w7x_dir = os.path.join(day_dir,'w7x')
     filename = exp_id[2:8] + exp_id[9:]+'.h5'
-    full_filename = os.path.join(day_dir,filename)
+    full_filename = os.path.join(w7x_dir,filename)
     try:
         datafile = h5py.File(full_filename, 'r')
     except Exception:
-        day_dir = os.path.join(_options['HDF path'],exp_id[2:8])
         full_filename = os.path.join(day_dir,filename)
         try:
             datafile = h5py.File(full_filename, 'r')
